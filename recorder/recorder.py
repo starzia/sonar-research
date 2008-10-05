@@ -137,6 +137,11 @@ def sleep_monitor():
     if DEBUG: print "SLEEPING MONITOR"
     subprocess.Popen(["/usr/bin/xset", "dpms", "force", "standby"])
 
+def idle_seconds():
+    """returns the number of seconds since the X server has had HID input."""
+    # this returns the stdout output of the program as a string
+    return subprocess.Popen(["../idle_detection/idle_detection"],stdout=PIPE).communicate()[0]
+
 def audio_length( audio_buffer ):
     """Returns the length, in seconds, of an audio buffer."""
     # 2* because each sample is 2 bytes
@@ -708,5 +713,20 @@ def sweep_freq( trials=TRAINING_TRIALS,
             [F,Y[present,i]] = welch_energy_spectrum( rec )
     [F,Y] = trim_to_range( F, Y, start_freq, end_freq )
     return [F,Y]
+
+def power_management( freq=19466 ):
+    """infinite loop that checks for idleness then shuts off monitor if
+    sonar does not detect user"""
+    blip = tone( 5, freq )
+    while( 1 ):
+        if( idle_seconds() > 5 ):
+            variance = (recorder.log10(
+                recorder.ping_loop_continuous_buf( blip, freq, 5, .05 ))).var()
+            if( variance < 4 ):
+                sleep_monitor()
+                # wait until active again
+                while( idle_seconds() > 5 ):
+                    real_sleep( 1 )
+        real_sleep( SLEEP_TIME )
 
 if __name__ == "__main__": main()
