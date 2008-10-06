@@ -139,8 +139,14 @@ def sleep_monitor():
 
 def idle_seconds():
     """returns the number of seconds since the X server has had HID input."""
+    from os.path import abspath
+    from os import getcwd
+    script_dir = getcwd()
+    script_dir = abspath( script_dir + "/.." )
+    script_file = script_dir + "/idle_detection/idle_detection"
+
     # this returns the stdout output of the program as a string
-    idle_time = subprocess.Popen(["/home/steve/svn/sonar/code/idle_detection/idle_detection"],stdout=subprocess.PIPE).communicate()[0]
+    idle_time = subprocess.Popen([script_file],stdout=subprocess.PIPE).communicate()[0]
     idle_time = int( idle_time )
     #print "  %d" % (idle_time,)
     return idle_time
@@ -317,17 +323,25 @@ def real_sleep( seconds ):
         time.sleep( 0.5 )
 
 def write_audio( audio_buf, filename ):
+    """parameter is a mono audio file but the output file is stereo with
+    silent right channel"""
+    # convert mono audio buffer to stereo
+    # below, parameters are ( buffer, width, lfactor, rfactor)
+    audio_buf = audioop.tostereo( audio_buf, 2, 1, 0 )
+
     wfile = wave.open( filename, 'w' )
-    wfile.setnchannels(1)
+    wfile.setnchannels(2)
     wfile.setsampwidth(2) # two bytes == 16 bit
     wfile.setframerate(RATE)
     wfile.writeframes( audio_buf )
     wfile.close()
 
 def read_audio( filename ):
+    """reads a stereo audio file but returns a mono buffer"""
     wfile = wave.open( filename, 'r' )
     buf = wfile.readframes( wfile.getnframes() )
-    return buf
+    # below, parameters are ( buffer, width, lfactor, rfactor)
+    return audioop.tomono( buf, 2, 1, 0 )
 
 def play_audio( audio_buffer ):
     """plays an audio clip.  This should return
