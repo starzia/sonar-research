@@ -12,5 +12,11 @@ int main(){
   Window win = DefaultRootWindow(dis);
   info = XScreenSaverAllocInfo();
   XScreenSaverQueryInfo( dis, win, info );
-  printf( "%d\n", info->idle/1000 );
+
+  /* if the screensaver is on return -1, else return idle time */
+  if( info->state == ScreenSaverOn ){
+    printf( "-1" );
+  }else{
+    printf( "%d", info->idle/1000 );
+  }
 }

@@ -140,7 +140,10 @@ def sleep_monitor():
 def idle_seconds():
     """returns the number of seconds since the X server has had HID input."""
     # this returns the stdout output of the program as a string
-    return subprocess.Popen(["../idle_detection/idle_detection"],stdout=PIPE).communicate()[0]
+    idle_time = subprocess.Popen(["/home/steve/svn/sonar/code/idle_detection/idle_detection"],stdout=subprocess.PIPE).communicate()[0]
+    idle_time = int( idle_time )
+    #print "  %d" % (idle_time,)
+    return idle_time
 
 def audio_length( audio_buffer ):
     """Returns the length, in seconds, of an audio buffer."""
@@ -714,19 +717,35 @@ def sweep_freq( trials=TRAINING_TRIALS,
     [F,Y] = trim_to_range( F, Y, start_freq, end_freq )
     return [F,Y]
 
+def log( message, logfile_name="log.txt" ):
+    """adds timestamped message to the logfile"""
+    t = time.time()
+    str = "%s (%d): %s\n" % ( time.strftime("%Y/%m/%d %H:%M:%S",
+                                            time.localtime(t)), 
+                              int(t), message )
+    logfile = open( logfile_name, 'a' ) # append to logfile
+    logfile.write( str )
+    logfile.close()
+
 def power_management( freq=19466 ):
     """infinite loop that checks for idleness then shuts off monitor if
     sonar does not detect user"""
+    log( "sonar power management began" )
     blip = tone( 5, freq )
     while( 1 ):
         if( idle_seconds() > 5 ):
-            variance = (recorder.log10(
-                recorder.ping_loop_continuous_buf( blip, freq, 5, .05 ))).var()
-            if( variance < 4 ):
+            log( "idle" )
+            variance = 100 * (log10(
+                ping_loop_continuous_buf( blip, freq, 5, .05 ))).var()
+            log( "first sonar is %d" % (variance,) )
+            print variance
+            if( variance < 4 and idle_seconds() > 5 ):
+                log( "standby" )
                 sleep_monitor()
                 # wait until active again
-                while( idle_seconds() > 5 ):
-                    real_sleep( 1 )
+                while( idle_seconds() < 0 ):
+                    real_sleep( 2 )
+                log( "active" )
         real_sleep( SLEEP_TIME )
 
 if __name__ == "__main__": main()
