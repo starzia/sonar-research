@@ -749,10 +749,12 @@ def power_management( freq=19466 ):
     while( 1 ):
         if( idle_seconds() > 5 ):
             log( "idle" )
-            variance = 100 * (log10(
-                ping_loop_continuous_buf( blip, freq, 5, .05 ))).var()
+            intensities = (log10(
+                ping_loop_continuous_buf( blip, freq, 5, .05 )))
+            variance = 100*intensities.var()
+            mean = 100*intensities.mean()
             log( "first sonar is %d" % (variance,) )
-            print variance
+            print "var=%d\tmean=%d" % ( int(variance), int(mean) )
             if( variance < 4 and idle_seconds() > 5 ):
                 log( "standby" )
                 sleep_monitor()
