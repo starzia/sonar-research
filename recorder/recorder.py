@@ -229,19 +229,42 @@ def welch_energy_spectrum( audio_buffer, N=FFT_POINTS, window_size=WINDOW_SIZE,
         Y += Yi
     return [F,Y]
 
+def energy_versus_time( audio_buffer, freq, window_size=0.01, N=FFT_POINTS ):
+    """returns the energy of the given frequency in the buffer as a function
+    of time [T,e].  window_size is the granularity of time sampling, in
+    seconds"""
+    total_length = audio_length( audio_buffer )
+    T = arange( 0, RATE*(total_length-window_size), RATE*window_size )/RATE
+    E = []
+    for t in T:
+        clip = audio_window( audio_buffer, window_size, t )
+        E.append( freq_energy( clip, freq, window_size/2 ) )
+    return [T,array(E)]
+
 def freq_index( freq ):
     """returns the spectrum index closest to a given frequency."""
     return round( (2.0*freq/RATE) * FFT_FREQUENCIES )
 
-def freq_energy( audio_buffer, freq_of_interest ):
+def freq_energy( audio_buffer, freq_of_interest, window_size=WINDOW_SIZE ):
     """returns the power/energy of the given time series data at the frequency
-    of interest."""
-    [F,Y] = welch_energy_spectrum( audio_buffer )
-    return Y[ freq_index(freq_of_interest) ]
+    of interest.  Uses Goertzel algorithm. Code adapted from:
+    http://en.wikipedia.org/wiki/Goertzel_algorithm"""
+     # normalized_frequency is measured in cycles per sample
+    normalized_frequency = float(freq_of_interest) / RATE
+    x = audio2array( audio_buffer )
+
+    s_prev = 0
+    s_prev2 = 0
+    coeff = 2*math.cos( 2*math.pi * normalized_frequency )
+    for x_n in x:
+      s = x_n + coeff*s_prev - s_prev2
+      s_prev2 = s_prev
+      s_prev = s    
+    return s_prev2*s_prev2 + s_prev*s_prev - coeff*s_prev2*s_prev
 
 def ascii_plot( vec, width=79 ):
     """prints an ascii bargraph.  Works only for positive numbers and there
-    must not be any NaNs."""
+    must not be any NaNs.  This fcn is obsoleted by matplotlib/pylab."""
     max = float( vec.max() )
     print "Normalized to maximum of %f" %(max,)
     tick_spacing = ( 10.0 ** floor( log10( max ) ) ) *width/max 
