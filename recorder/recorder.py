@@ -139,9 +139,9 @@ def sleep_monitor():
 
 def idle_seconds():
     """returns the number of seconds since the X server has had HID input."""
-    from os.path import abspath
+    from os.path import abspath,dirname
     from os import getcwd
-    script_dir = getcwd()
+    script_dir = dirname(sys.argv[0])
     script_dir = abspath( script_dir + "/.." )
     script_file = script_dir + "/idle_detection/idle_detection"
 
@@ -511,7 +511,6 @@ def training_discrete( lowest_freq=30, highest_freq=17000 ):
     else:
         return training_discrete( amp_freq/interval, amp_freq*interval )
 
-
 def training( lowest_freq=30, highest_freq=17000 ):
     """finds the frequency with highest degree of amplification or attentuation
     The parameters define the frequency search boundaries"""
@@ -582,21 +581,9 @@ def ping_loop_continuous_buf( blip, freq, length, polling_interval ):
         rec = record_audio( polling_interval )
         energy = freq_energy( rec, freq )
         E.append( energy )
+        time.sleep( 0.2 ) # sleep to prevent 100% CPU utilization
         #print "%f" % (energy,)
     return array(E)
-
-def main():
-    """test script"""
-    #if len(sys.argv) != 2:
-    #	sys.stdout.write('usage: recorder [wav_file]\n')
-    #	sys.exit()
-
-    ##print 'Training...'
-    ##best_freq = training(60, 3000)
-    best_freq = 1119.726562
-
-    ping_loop( best_freq )
-    return
 
 def test():
     freq = 1119.726562
@@ -795,5 +782,9 @@ def power_management( freq=19466 ):
                     real_sleep( 2 )
                 log( "active" )
         real_sleep( SLEEP_TIME )
+
+def main():
+    power_management()
+    return
 
 if __name__ == "__main__": main()
