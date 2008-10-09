@@ -247,8 +247,17 @@ def freq_index( freq ):
 
 def freq_energy( audio_buffer, freq_of_interest, window_size=WINDOW_SIZE ):
     """returns the power/energy of the given time series data at the frequency
+    of interest."""
+    [F,Y] = welch_energy_spectrum( audio_buffer, FFT_POINTS, window_size )
+    return Y[ freq_index(freq_of_interest) ]
+
+def freq_energy_goertzel( audio_buffer, freq_of_interest, 
+                          window_size=WINDOW_SIZE ):
+    """returns the power/energy of the given time series data at the frequency
     of interest.  Uses Goertzel algorithm. Code adapted from:
-    http://en.wikipedia.org/wiki/Goertzel_algorithm"""
+    http://en.wikipedia.org/wiki/Goertzel_algorithm
+    It turns out that this is less efficient than doing the entire FFT.
+    FFT is O(N log N) where N is the number of *buckets*, a small number."""
      # normalized_frequency is measured in cycles per sample
     normalized_frequency = float(freq_of_interest) / RATE
     x = audio2array( audio_buffer )
