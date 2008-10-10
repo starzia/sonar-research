@@ -760,7 +760,7 @@ def log( message, logfile_name="log.txt" ):
     logfile.write( str )
     logfile.close()
 
-def power_management( freq=19466 ):
+def power_management( freq=19466, threshold=40 ):
     """infinite loop that checks for idleness then shuts off monitor if
     sonar does not detect user"""
     log( "sonar power management began" )
@@ -774,7 +774,7 @@ def power_management( freq=19466 ):
             mean = 100*intensities.mean()
             log( "first sonar is %d" % (variance,) )
             print "var=%d\tmean=%d" % ( int(variance), int(mean) )
-            if( variance < 4 and idle_seconds() > 5 ):
+            if( variance < threshold and idle_seconds() > 5 ):
                 log( "standby" )
                 sleep_monitor()
                 # wait until active again
