@@ -760,9 +760,20 @@ def log( message, logfile_name="log.txt" ):
     logfile.write( str )
     logfile.close()
 
+def term_handler( signum, frame ):
+    """on power_management termination (by ctrl^c, kill, shutdown, etc),
+    log this event."""
+    log( "sonar power management terminated" )
+    raise SystemExit
+
 def power_management( freq=19466, threshold=40 ):
     """infinite loop that checks for idleness then shuts off monitor if
     sonar does not detect user"""
+    # register signal handler for program termination
+    from signal import signal, SIGTERM, SIGINT
+    signal( SIGTERM, term_handler )
+    signal( SIGINT, term_handler )
+
     log( "sonar power management began" )
     blip = tone( 5, freq )
     while( 1 ):
