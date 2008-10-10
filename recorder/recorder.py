@@ -801,13 +801,30 @@ def power_management( freq=19466, threshold=40 ):
 def calibrate():
     """Runs some tests and then creates a configuration file in the user's
     home directory"""
-    #TODO: actually run some tests
+    # initialize a configuration object
     from ConfigParser import ConfigParser
     config = ConfigParser()
     config.add_section( 'calibration' )
-    config.set( 'calibration', 'frequency', '19000' )
+
+    # Choose the ping frequency
+    # We start with 20khz and reduce it until we get a reading on the mic.
+    silence = tone( 0.3, 0 )
+    silence_reading=1
+    blip_reading=1
+    freq = 22000
+    while( freq > 1000 and blip_reading/silence_reading < 100 ):
+        freq *= 0.9
+        blip = tone( 0.3, freq )
+        blip_reading = measure_buf( blip, freq )
+        silence_reading = measure_buf( silence, freq )
+    if( freq <= 1000 ): raise RuntimeError
+    print "chose frequency of %d" % (freq,)
+    config.set( 'calibration', 'frequency', int(freq) )
+
+    #TODO: actually run some tests to determine threshold
     config.set( 'calibration', 'threshold', '40' )
 
+    # create directory, if necessary
     from os.path import isdir
     from os import mkdir
     if not isdir( CONFIG_DIR_PATH ):
