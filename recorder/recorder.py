@@ -9,6 +9,10 @@ from numpy import *
 from numpy.fft import *
 import sys,ossaudiodev,wave, audioop
 
+from os.path import expanduser
+CONFIG_DIR_PATH = expanduser( '~/.sonarPM/' )
+CONFIG_FILE_PATH = CONFIG_DIR_PATH + 'sonarPM.cfg'
+LOG_FILE_PATH = CONFIG_DIR_PATH + 'log.txt'
 INT16_MAX = 32767
 REC_DEV='/dev/dsp2'
 RATE=44100
@@ -750,7 +754,7 @@ def sweep_freq( trials=TRAINING_TRIALS,
     [F,Y] = trim_to_range( F, Y, start_freq, end_freq )
     return [F,Y]
 
-def log( message, logfile_name="log.txt" ):
+def log( message, logfile_name=LOG_FILE_PATH ):
     """adds timestamped message to the logfile"""
     t = time.time()
     str = "%s (%d): %s\n" % ( time.strftime("%Y/%m/%d %H:%M:%S",
@@ -794,8 +798,44 @@ def power_management( freq=19466, threshold=40 ):
                 log( "active" )
         real_sleep( SLEEP_TIME )
 
+def calibrate():
+    """Runs some tests and then creates a configuration file in the user's
+    home directory"""
+    #TODO: actually run some tests
+    from ConfigParser import ConfigParser
+    config = ConfigParser()
+    config.add_section( 'calibration' )
+    config.set( 'calibration', 'frequency', '19000' )
+    config.set( 'calibration', 'threshold', '40' )
+
+    from os.path import isdir
+    from os import mkdir
+    if not isdir( CONFIG_DIR_PATH ):
+        mkdir( CONFIG_DIR_PATH )
+    config_file = open( CONFIG_FILE_PATH, 'w' )
+    config.write( config_file )
+
+def load_config_file():
+    """Loads previous calibration data from config file or runs the
+    calibration script if no data yet exists."""
+    from os.path import exists
+    if not exists( CONFIG_FILE_PATH ):
+        print "Config file not found.  Calibration will follow."
+        calibrate()
+        # now config file should have been created
+        return load_config_file()
+    else:
+        print "Config file found."
+        from ConfigParser import ConfigParser
+        config = ConfigParser()
+        config.read( CONFIG_FILE_PATH )
+        freq = int( config.get( 'calibration', 'frequency' ) )
+        threshold = int( config.get( 'calibration', 'threshold' ) )
+        return [freq, threshold]
+
 def main():
-    power_management()
+    [ freq, threshold ] = load_config_file()
+    power_management( freq, threshold )
     return
 
 if __name__ == "__main__": main()
