@@ -492,10 +492,10 @@ def training_discrete( lowest_freq=30, highest_freq=17000 ):
 
     for present in  [ 1, 0 ]:
         if present:
-            print "Press return and sit still until further notice"
+            print "Press <enter> and sit still until further notice"
             sys.stdin.readline()
         else:
-            print "Press return and walk away until further notice"
+            print "Press <enter> and walk away until further notice"
             sys.stdin.readline()
             real_sleep( 3 )
 
@@ -524,10 +524,10 @@ def training( lowest_freq=30, highest_freq=17000 ):
     Y = empty( (2,TRAINING_TRIALS,FFT_FREQUENCIES) )
     for present in  [ 1, 0 ]:
         if present:
-            print "Press return and sit still until further notice"
+            print "Press <enter> and sit still until further notice"
             sys.stdin.readline()
         else:
-            print "Press return and walk away until further notice"
+            print "Press <enter> and walk away until further notice"
             sys.stdin.readline()
             real_sleep( 3 )
         for trial in range( TRAINING_TRIALS ):
@@ -564,6 +564,23 @@ def ping_loop( freq, length=TONE_LENGTH ):
         if DEBUG: print 'Sleeping...'
         real_sleep( SLEEP_TIME )
     return
+
+def measure_stats( audio_buffer, freq, polling_interval=0.2 ):
+    """Returns the mean and variance of the intensities of a given frequency
+    in the audio buffer sampled in windows spread throughout the recording."""
+    DUTY = 0.1 # duty cycle for audio analysis
+    intensities = []
+    t=REC_PADDING
+    while( t < audio_length( audio_buffer ) ):
+        intensities.append( freq_energy( audio_window( audio_buffer,
+                                                       polling_interval*DUTY, 
+                                                       t ),
+                                         freq ) )
+        t += polling_interval
+    intensities = log10( array( intensities ) )
+    variance = 1000*intensities.var()
+    mean = 10*intensities.mean()
+    return [ mean, variance ]
 
 def ping_loop_continuous( freq, length=60, polling_interval=0.4 ):
     """Plays a tone $length seconds long while periodically measuring the
@@ -651,10 +668,10 @@ def test_CTFM( ping_length = 1, ping_period = 0.01, freq_start = 20000,
     cc = empty( (2,TRAINING_TRIALS,cc_samples) )
     for present in  [ 1, 0 ]:
         if present:
-            print "Press return and sit still until further notice"
+            print "Press <enter> and sit still until further notice"
             sys.stdin.readline()
         else:
-            print "Press return and walk away until further notice"
+            print "Press <enter> and walk away until further notice"
             sys.stdin.readline()
             real_sleep( 3 )
         for trial in range( TRAINING_TRIALS ):
@@ -704,10 +721,10 @@ def write_recordings( ping, filename, num_trials=TRAINING_TRIALS ):
     recordings = [[],[]]
     for present in  [ 1, 0 ]:
         if present:
-            print "Press return and sit still until further notice"
+            print "Press <enter> and sit still until further notice"
             sys.stdin.readline()
         else:
-            print "Press return and walk away until further notice"
+            print "Press <enter> and walk away until further notice"
             sys.stdin.readline()
             real_sleep( 3 )
         for trial in range( num_trials ):
@@ -742,10 +759,10 @@ def sweep_freq( trials=TRAINING_TRIALS,
     Y = zeros( (2,trials,FFT_FREQUENCIES) )
     for present in  [ 1, 0 ]:
         if present:
-            print "Press return and sit still until further notice"
+            print "Press <enter> and sit still until further notice"
             sys.stdin.readline()
         else:
-            print "Press return and walk away until further notice"
+            print "Press <enter> and walk away until further notice"
             sys.stdin.readline()
             real_sleep( 3 )
         for i in range( trials ):
@@ -783,10 +800,8 @@ def power_management( freq=19466, threshold=40 ):
     while( 1 ):
         if( idle_seconds() > 5 ):
             log( "idle" )
-            intensities = (log10(
-                ping_loop_continuous_buf( blip, freq, 5, .05 )))
-            variance = 100*intensities.var()
-            mean = 100*intensities.mean()
+            rec = recordback( blip )
+            [ mean, variance ] = measure_stats( rec, freq )
             log( "first sonar is %d" % (variance,) )
             print "var=%d\tmean=%d" % ( int(variance), int(mean) )
             if( variance < threshold and idle_seconds() > 5 ):
@@ -801,10 +816,43 @@ def power_management( freq=19466, threshold=40 ):
 def calibrate():
     """Runs some tests and then creates a configuration file in the user's
     home directory"""
+    print "Please enter your OSS recording device [/dev/dsp]:"
+    line = sys.stdin.readline().rstrip()
+    if line == "":
+        line = '/dev/dsp'
+    recording_device = line
+    global REC_DEV
+    REC_DEV = recording_device
+
+    print """
+    A short calibration procedure is now required in order to match
+    the sonar system's parameters to your speakers, microphone, and the
+    acoustics of your room.
+
+    Please set the volume level on your speakers and on your soundcard mixer
+    to a comfortable level.  You should NOT adjust these levels after 
+    calibration.  You can, however, adjust the volume slider within your
+    media player.
+
+    If you switch rooms or want to change speaker volume levels you should 
+    recalibrate the sonar.  This is done by deleting the file
+    %s
+    and restarting this application.
+
+    Press <enter> to continue""" % (CONFIG_FILE_PATH,)
+    sys.stdin.readline()
+
     # initialize a configuration object
     from ConfigParser import ConfigParser
     config = ConfigParser()
+    config.add_section( 'hardware' )
     config.add_section( 'calibration' )
+
+    # create directory, if necessary
+    from os.path import isdir
+    from os import mkdir
+    if not isdir( CONFIG_DIR_PATH ):
+        mkdir( CONFIG_DIR_PATH )
 
     # Choose the ping frequency
     # We start with 20khz and reduce it until we get a reading on the mic.
@@ -818,23 +866,38 @@ def calibrate():
         blip_reading = measure_buf( blip, freq )
         silence_reading = measure_buf( silence, freq )
     if( freq <= 1000 ): raise RuntimeError
+    freq = int( freq )
     print "chose frequency of %d" % (freq,)
-    config.set( 'calibration', 'frequency', int(freq) )
 
-    #TODO: actually run some tests to determine threshold
-    config.set( 'calibration', 'threshold', '40' )
-
-    # create directory, if necessary
-    from os.path import isdir
-    from os import mkdir
-    if not isdir( CONFIG_DIR_PATH ):
-        mkdir( CONFIG_DIR_PATH )
+    # Choose the threshold for presence
+    ping = tone( 5, freq )
+    calibration_file = CONFIG_DIR_PATH + 'calibration.dat'
+    write_recordings( ping, calibration_file, TRAINING_TRIALS )
+    rec = read_recordings( calibration_file )
+    mean = empty( (2,TRAINING_TRIALS) )
+    var = empty( (2,TRAINING_TRIALS) )
+    for p in [0,1]:
+        for i in range(TRAINING_TRIALS):
+            [ mean[p][i], var[p][i] ] = measure_stats( rec[p][i], freq )
+    present_var = var[1].mean()
+    not_present_var = var[0].mean()
+    print "variances: present: %f not_present %f" % ( present_var, 
+                                                      not_present_var )
+    threshold = int( ceil( not_present_var ) )
+    
+    # write configuration to a file
+    config.set( 'hardware', 'recording_device', recording_device )
+    config.set( 'calibration', 'frequency', freq )    
+    config.set( 'calibration', 'threshold', threshold )
     config_file = open( CONFIG_FILE_PATH, 'w' )
     config.write( config_file )
+    log( "calibration frequency %d threshold %d device %s" % 
+         (freq,threshold,recording_device) )
 
 def load_config_file():
     """Loads previous calibration data from config file or runs the
     calibration script if no data yet exists."""
+    global REC_DEV
     from os.path import exists
     if not exists( CONFIG_FILE_PATH ):
         print "Config file not found.  Calibration will follow."
@@ -846,6 +909,7 @@ def load_config_file():
         from ConfigParser import ConfigParser
         config = ConfigParser()
         config.read( CONFIG_FILE_PATH )
+        REC_DEV = config.get( 'hardware', 'recording_device' )
         freq = int( config.get( 'calibration', 'frequency' ) )
         threshold = int( config.get( 'calibration', 'threshold' ) )
         return [freq, threshold]
