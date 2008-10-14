@@ -9,12 +9,24 @@ from numpy import *
 from numpy.fft import *
 import sys,ossaudiodev,wave, audioop
 
+#----------------------------------------------------------------------------
+# Global variables whose values are modified by configuration file
+#----------------------------------------------------------------------------
+PHONE_HOME = 'decline' # default
+LOG_START_TIME = 9999999999 # default
+REC_DEV='/dev/dsp2' # default
+
+#----------------------------------------------------------------------------
+# Constants
+#----------------------------------------------------------------------------
+LOG_ADDR = 'starzia@northwestern.edu'
+SMTP_SERVER = 'hecky.it.northwestern.edu'
 from os.path import expanduser
 CONFIG_DIR_PATH = expanduser( '~/.sonarPM/' )
 CONFIG_FILE_PATH = CONFIG_DIR_PATH + 'sonarPM.cfg'
 LOG_FILE_PATH = CONFIG_DIR_PATH + 'log.txt'
+TRIAL_PERIOD = 604800 # one week, in seconds
 INT16_MAX = 32767
-REC_DEV='/dev/dsp2'
 RATE=44100
 TONE_LENGTH= 1
 TONE_VOLUME= 0.1 # one a scale from 0 to 1
@@ -804,7 +816,7 @@ def power_management( freq=19466, threshold=40 ):
             [ mean, variance ] = measure_stats( rec, freq )
             log( "first sonar is %d" % (variance,) )
             print "var=%d\tmean=%d" % ( int(variance), int(mean) )
-            if( variance < threshold and idle_seconds() > 5 ):
+            if( variance <= threshold and idle_seconds() > 5 ):
                 log( "standby" )
                 sleep_monitor()
                 # wait until active again
@@ -813,9 +825,29 @@ def power_management( freq=19466, threshold=40 ):
                 log( "active" )
         real_sleep( SLEEP_TIME )
 
+        # if TRIAL_PERIOD has elapsed, phone home (if enabled)
+        if ( PHONE_HOME == 'send' and 
+             time.time() - LOG_START_TIME > TRIAL_PERIOD ):
+            phone_home()
+
 def calibrate():
     """Runs some tests and then creates a configuration file in the user's
     home directory"""
+
+    print """
+    In order to improve upon future versions of this software, we ask that you
+    allow us to collect a log of software events.  No personal information, 
+    including identifying information, will be collected.  A log would be sent
+    only ONCE, after the first week of usage.  You may view the contents of 
+    the log at:
+      %s""" % ( LOG_FILE_PATH, )
+    phone_home = ""
+    while phone_home != "send" and phone_home != "decline":
+        print """
+        Please type 'send' now to approve the emailing of your log file one
+        week from now.  Otherwise, type 'decline':"""
+        phone_home = sys.stdin.readline().rstrip()
+
     print "Please enter your OSS recording device [/dev/dsp]:"
     line = sys.stdin.readline().rstrip()
     if line == "":
@@ -823,6 +855,7 @@ def calibrate():
     recording_device = line
     global REC_DEV
     REC_DEV = recording_device
+    print "Audio playback will be done through the default ALSA device."
 
     print """
     A short calibration procedure is now required in order to match
@@ -841,12 +874,6 @@ def calibrate():
 
     Press <enter> to continue""" % (CONFIG_FILE_PATH,)
     sys.stdin.readline()
-
-    # initialize a configuration object
-    from ConfigParser import ConfigParser
-    config = ConfigParser()
-    config.add_section( 'hardware' )
-    config.add_section( 'calibration' )
 
     # create directory, if necessary
     from os.path import isdir
@@ -885,19 +912,30 @@ def calibrate():
                                                       not_present_var )
     threshold = int( ceil( not_present_var ) )
     
+    write_config_file( phone_home, recording_device, freq, threshold )
+    log( "calibration frequency %d threshold %d device %s" % 
+         (freq,threshold,recording_device) )
+
+def write_config_file( phone_home, recording_device, freq, threshold ):
+    """Writes a configuration file with the passed values.  Note that the
+    configuration directory must already exist."""
+    # initialize a configuration object
+    from ConfigParser import ConfigParser
+    config = ConfigParser()
+    config.add_section( 'general' )
+    config.add_section( 'calibration' )
+
     # write configuration to a file
-    config.set( 'hardware', 'recording_device', recording_device )
+    config.set( 'general', 'phone_home', phone_home )
+    config.set( 'general', 'recording_device', recording_device )
     config.set( 'calibration', 'frequency', freq )    
     config.set( 'calibration', 'threshold', threshold )
     config_file = open( CONFIG_FILE_PATH, 'w' )
     config.write( config_file )
-    log( "calibration frequency %d threshold %d device %s" % 
-         (freq,threshold,recording_device) )
 
 def load_config_file():
     """Loads previous calibration data from config file or runs the
     calibration script if no data yet exists."""
-    global REC_DEV
     from os.path import exists
     if not exists( CONFIG_FILE_PATH ):
         print "Config file not found.  Calibration will follow."
@@ -909,13 +947,54 @@ def load_config_file():
         from ConfigParser import ConfigParser
         config = ConfigParser()
         config.read( CONFIG_FILE_PATH )
-        REC_DEV = config.get( 'hardware', 'recording_device' )
+        phone_home = config.get( 'general', 'phone_home' )
+        rec_dev = config.get( 'general', 'recording_device' )
         freq = int( config.get( 'calibration', 'frequency' ) )
         threshold = int( config.get( 'calibration', 'threshold' ) )
-        return [freq, threshold]
+        return [phone_home, rec_dev, freq, threshold]
+
+def disable_phone_home():
+    """rewrite configuration file to disable phoning home."""
+    [phone_home,rec_dev,freq,threshold] = load_config_file()
+    write_config_file( 'decline', rec_dev, freq, threshold )
+
+def phone_home( dest_addr=LOG_ADDR, smtp_server=SMTP_SERVER ):
+    """emails log.txt to us.  Also, disable future phoning home."""
+    from smtplib import SMTP
+    from_addr = 'user@localhost'
+    msg = ("From: %s\r\nTo: %s\r\nSubject: sonarPM phone home\r\n\r\n"
+           % (from_addr, dest_addr) )
+    # append log file
+    log_file = open( LOG_FILE_PATH, 'r' )
+    for line in log_file:
+        msg += line
+    log_file.close()
+
+    server = SMTP( smtp_server )
+    server.set_debuglevel(0)
+    server.sendmail(from_addr, dest_addr, msg)
+    server.quit()
+    print "Sent log email."
+
+    disable_phone_home()
+
+def log_start_time():
+    """Parses the log file and returns the time of the first stamped message"""
+    from os.path import exists
+    # if log file has not yet been created return current time.
+    if not exists( LOG_FILE_PATH ):
+        return time.time()
+    else:
+        log_file = open( LOG_FILE_PATH, 'r' )
+        line = log_file.readline()
+        log_file.close()
+        toks = line.split()
+        return int( toks[2].strip('():') )
 
 def main():
-    [ freq, threshold ] = load_config_file()
+    global REC_DEV, PHONE_HOME, LOG_START_TIME
+    [ PHONE_HOME, REC_DEV, freq, threshold ] = load_config_file()
+    LOG_START_TIME = log_start_time()
     power_management( freq, threshold )
     return
 
