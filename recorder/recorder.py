@@ -20,7 +20,7 @@ REC_DEV='/dev/dsp2' # default
 # Constants
 #----------------------------------------------------------------------------
 SPEAKER='right' # 'left'
-REQD_GAIN = 1.5 # this is the required minimum gain determining the ping freq
+REQD_GAIN = 5 # this is the required minimum gain determining the ping freq
 TONE_LENGTH = 5 # ping length
 IDLE_THRESH = TONE_LENGTH # period of input inactivity required, in seconds
 LOG_ADDR = 'starzia@northwestern.edu'
@@ -843,6 +843,65 @@ def power_management( freq=19466, threshold=40 ):
              time.time() - LOG_START_TIME > TRIAL_PERIOD ):
             phone_home()
 
+def choose_ping_freq():
+    """Prompt the user to find the best ping frequency.
+    Generally, we want to choose a frequency that is both low enough to
+    register on the (probably cheap) audio equipment but high enough to be
+    inaudible."""
+    # We start with 20khz and reduce it until we get a reading on the mic.
+    print 'Please wait while we find your highest sensitive frequency.'
+    silence = tone( TONE_LENGTH, 0 )
+    silence_rec = recordback( silence )
+    silence_reading=1
+    blip_reading=1
+    freq = 22000
+    # below, we subtract two readings because they are logarithms
+    while( freq > 1000 and blip_reading-silence_reading < REQD_GAIN ):
+        freq *= 0.9
+        blip = tone( TONE_LENGTH, freq )
+        rec = recordback( blip )
+        [ blip_reading, blip_var ] = measure_stats( rec, freq )
+        [ silence_reading, silence_var ] = measure_stats( silence_rec, freq )
+        print "blip: %f silence: %f" % (blip_reading,silence_reading)
+    if( freq <= 1000 ): raise RuntimeError
+    freq = int( freq )
+    print "chose frequency of %d" % (freq,)
+    return freq
+
+def choose_ping_threshold( freq ):
+    """Choose the variance threshold for presence detection by prompting
+    the user."""
+    from os import remove
+    ping = tone( TONE_LENGTH, freq )
+    calibration_file = CONFIG_DIR_PATH + 'calibration.dat'
+    write_recordings( ping, calibration_file, TRAINING_TRIALS )
+    rec = read_recordings( calibration_file )
+    remove( calibration_file )
+    mean = empty( (2,TRAINING_TRIALS) )
+    var = empty( (2,TRAINING_TRIALS) )
+    for p in [0,1]:
+        for i in range(TRAINING_TRIALS):
+            [ mean[p][i], var[p][i] ] = measure_stats( rec[p][i], freq )
+    present_var = var[1].mean()
+    not_present_var = var[0].mean()
+    print "variances: present: %f not_present %f" % ( present_var, 
+                                                      not_present_var )
+    threshold = int( ceil( not_present_var ) )    
+    confidence = present_var/not_present_var
+    return [ threshold, confidence ]
+
+def choose_recording_device():
+    """Prompt the user to choose their preferred recording device."""
+    print "Please enter your OSS recording device [/dev/dsp]:"
+    line = sys.stdin.readline().rstrip()
+    if line == "":
+        line = '/dev/dsp'
+    recording_device = line
+    global REC_DEV
+    REC_DEV = recording_device
+    print "Audio playback will be done through the default ALSA device."
+    return recording_device
+
 def calibrate():
     """Runs some tests and then creates a configuration file in the user's
     home directory"""
@@ -860,15 +919,6 @@ def calibrate():
         Please type 'send' now to approve the emailing of your log file one
         week from now.  Otherwise, type 'decline':"""
         phone_home = sys.stdin.readline().rstrip()
-
-    print "Please enter your OSS recording device [/dev/dsp]:"
-    line = sys.stdin.readline().rstrip()
-    if line == "":
-        line = '/dev/dsp'
-    recording_device = line
-    global REC_DEV
-    REC_DEV = recording_device
-    print "Audio playback will be done through the default ALSA device."
 
     print """
     A short calibration procedure is now required in order to match
@@ -890,49 +940,17 @@ def calibrate():
 
     # create configuration directory, if necessary
     from os.path import isdir
-    from os import mkdir, remove
+    from os import mkdir
     if not isdir( CONFIG_DIR_PATH ):
         mkdir( CONFIG_DIR_PATH )
 
-    # Choose the ping frequency
-    # We start with 20khz and reduce it until we get a reading on the mic.
-    print 'Please wait while we find your highest sensitive frequency.'
-    silence = tone( TONE_LENGTH, 0 )
-    silence_rec = recordback( silence )
-    silence_reading=1
-    blip_reading=1
-    freq = 22000
-    while( freq > 1000 and blip_reading/silence_reading < REQD_GAIN ):
-        freq *= 0.9
-        blip = tone( TONE_LENGTH, freq )
-        rec = recordback( blip )
-        [ blip_reading, blip_var ] = measure_stats( rec, freq )
-        [ silence_reading, silence_var ] = measure_stats( silence_rec, freq )
-        print "blip: %f silence: %f" % (blip_reading,silence_reading)
-    if( freq <= 1000 ): raise RuntimeError
-    freq = int( freq )
-    print "chose frequency of %d" % (freq,)
+    recording_device = choose_recording_device()
+    freq = choose_ping_freq()
+    [threshold,confidence] = choose_ping_threshold( freq )
 
-    # Choose the threshold for presence
-    ping = tone( TONE_LENGTH, freq )
-    calibration_file = CONFIG_DIR_PATH + 'calibration.dat'
-    write_recordings( ping, calibration_file, TRAINING_TRIALS )
-    rec = read_recordings( calibration_file )
-    remove( calibration_file )
-    mean = empty( (2,TRAINING_TRIALS) )
-    var = empty( (2,TRAINING_TRIALS) )
-    for p in [0,1]:
-        for i in range(TRAINING_TRIALS):
-            [ mean[p][i], var[p][i] ] = measure_stats( rec[p][i], freq )
-    present_var = var[1].mean()
-    not_present_var = var[0].mean()
-    print "variances: present: %f not_present %f" % ( present_var, 
-                                                      not_present_var )
-    threshold = int( ceil( not_present_var ) )
-    
     write_config_file( phone_home, recording_device, freq, threshold )
-    log( "calibration frequency %d threshold %d device %s present %f not_present %f" % 
-         (freq,threshold,recording_device,present_var,not_present_var) )
+    log( "calibration frequency %d threshold %d device %s confidence %f" % 
+         (freq,threshold,recording_device,confidence) )
 
 def write_config_file( phone_home, recording_device, freq, threshold ):
     """Writes a configuration file with the passed values.  Note that the
