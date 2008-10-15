@@ -743,7 +743,7 @@ def write_recordings( ping, filename, num_trials=TRAINING_TRIALS ):
             recordings[present].append( recordback( ping ) )
             real_sleep( 1 )
     # beep to recall user to computer
-    play_audio( tone() )
+    play_audio( tone( 0.5, 2000 ) )
     file = open( filename, 'wb' )
     dump( recordings, file )
     file.close()
