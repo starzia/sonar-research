@@ -19,7 +19,8 @@ REC_DEV='/dev/dsp2' # default
 #----------------------------------------------------------------------------
 # Constants
 #----------------------------------------------------------------------------
-REQD_GAIN = 50 # this is the required minimum gain determining the ping freq
+SPEAKER='right' # 'left'
+REQD_GAIN = 1.5 # this is the required minimum gain determining the ping freq
 TONE_LENGTH = 5 # ping length
 IDLE_THRESH = TONE_LENGTH # period of input inactivity required, in seconds
 LOG_ADDR = 'starzia@northwestern.edu'
@@ -377,7 +378,10 @@ def write_audio( audio_buf, filename ):
     silent right channel"""
     # convert mono audio buffer to stereo
     # below, parameters are ( buffer, width, lfactor, rfactor)
-    audio_buf = audioop.tostereo( audio_buf, 2, 1, 0 )
+    if SPEAKER=='right':
+        audio_buf = audioop.tostereo( audio_buf, 2, 0, 1 )
+    else: # SPEAKER=='left'
+        audio_buf = audioop.tostereo( audio_buf, 2, 1, 0 )
 
     wfile = wave.open( filename, 'w' )
     wfile.setnchannels(2)
@@ -884,7 +888,7 @@ def calibrate():
     Press <enter> to continue""" % (CONFIG_FILE_PATH,)
     sys.stdin.readline()
 
-    # create directory, if necessary
+    # create configuration directory, if necessary
     from os.path import isdir
     from os import mkdir, remove
     if not isdir( CONFIG_DIR_PATH ):
@@ -892,15 +896,19 @@ def calibrate():
 
     # Choose the ping frequency
     # We start with 20khz and reduce it until we get a reading on the mic.
-    silence = tone( 0.3, 0 )
+    print 'Please wait while we find your highest sensitive frequency.'
+    silence = tone( TONE_LENGTH, 0 )
+    silence_rec = recordback( silence )
     silence_reading=1
     blip_reading=1
     freq = 22000
     while( freq > 1000 and blip_reading/silence_reading < REQD_GAIN ):
         freq *= 0.9
-        blip = tone( 0.3, freq )
-        blip_reading = measure_buf( blip, freq )
-        silence_reading = measure_buf( silence, freq )
+        blip = tone( TONE_LENGTH, freq )
+        rec = recordback( blip )
+        [ blip_reading, blip_var ] = measure_stats( rec, freq )
+        [ silence_reading, silence_var ] = measure_stats( silence_rec, freq )
+        print "blip: %f silence: %f" % (blip_reading,silence_reading)
     if( freq <= 1000 ): raise RuntimeError
     freq = int( freq )
     print "chose frequency of %d" % (freq,)
