@@ -738,7 +738,7 @@ def write_recordings( ping, filename, num_trials=TRAINING_TRIALS ):
             print "Press <enter> and sit still until further notice"
             sys.stdin.readline()
         else:
-            print "Press <enter> and walk away until you hear a beep"
+            print "Press <enter> and stay away until you hear a beep"
             sys.stdin.readline()
             real_sleep( 3 )
         for trial in range( num_trials ):
