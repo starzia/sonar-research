@@ -19,6 +19,9 @@ REC_DEV='/dev/dsp2' # default
 #----------------------------------------------------------------------------
 # Constants
 #----------------------------------------------------------------------------
+REQD_GAIN = 50 # this is the required minimum gain determining the ping freq
+TONE_LENGTH = 5 # ping length
+IDLE_THRESH = TONE_LENGTH # period of input inactivity required, in seconds
 LOG_ADDR = 'starzia@northwestern.edu'
 SMTP_SERVER = 'hecky.it.northwestern.edu'
 from os.path import expanduser
@@ -28,7 +31,6 @@ LOG_FILE_PATH = CONFIG_DIR_PATH + 'log.txt'
 TRIAL_PERIOD = 604800 # one week, in seconds
 INT16_MAX = 32767
 RATE=44100
-TONE_LENGTH= 1
 TONE_VOLUME= 0.1 # one a scale from 0 to 1
 REC_PADDING = 0.2 # amount of extra time to recordback to account for lack of
                 # playback/record synchronization
@@ -810,21 +812,26 @@ def power_management( freq=19466, threshold=40 ):
     signal( SIGINT, term_handler )
 
     log( "sonar power management began" )
-    blip = tone( 5, freq )
+    blip = tone( TONE_LENGTH, freq )
     while( 1 ):
-        if( idle_seconds() > 5 ):
+        if( idle_seconds() > IDLE_THRESH ):
             log( "idle" )
             rec = recordback( blip )
             [ mean, variance ] = measure_stats( rec, freq )
             log( "first sonar is %d" % (variance,) )
             print "var=%d\tmean=%d" % ( int(variance), int(mean) )
-            if( variance <= threshold and idle_seconds() > 5 ):
-                log( "standby" )
-                sleep_monitor()
-                # wait until active again
-                while( idle_seconds() < 0 ):
-                    real_sleep( 2 )
-                log( "active" )
+            if( variance <= threshold and idle_seconds() > IDLE_THRESH ):
+                rec = recordback( blip )
+                [ mean, variance ] = measure_stats( rec, freq )
+                log( "second sonar is %d" % (variance,) )
+                print "var=%d\tmean=%d" % ( int(variance), int(mean) )
+                if( variance <= threshold and idle_seconds() > IDLE_THRESH ):
+                    log( "standby" )
+                    sleep_monitor()
+                    # wait until active again
+                    while( idle_seconds() < 0 ):
+                        real_sleep( 2 )
+                    log( "active" )
         real_sleep( SLEEP_TIME )
 
         # if TRIAL_PERIOD has elapsed, phone home (if enabled)
@@ -889,7 +896,7 @@ def calibrate():
     silence_reading=1
     blip_reading=1
     freq = 22000
-    while( freq > 1000 and blip_reading/silence_reading < 100 ):
+    while( freq > 1000 and blip_reading/silence_reading < REQD_GAIN ):
         freq *= 0.9
         blip = tone( 0.3, freq )
         blip_reading = measure_buf( blip, freq )
@@ -899,7 +906,7 @@ def calibrate():
     print "chose frequency of %d" % (freq,)
 
     # Choose the threshold for presence
-    ping = tone( 5, freq )
+    ping = tone( TONE_LENGTH, freq )
     calibration_file = CONFIG_DIR_PATH + 'calibration.dat'
     write_recordings( ping, calibration_file, TRAINING_TRIALS )
     rec = read_recordings( calibration_file )
