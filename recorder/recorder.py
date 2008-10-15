@@ -736,12 +736,14 @@ def write_recordings( ping, filename, num_trials=TRAINING_TRIALS ):
             print "Press <enter> and sit still until further notice"
             sys.stdin.readline()
         else:
-            print "Press <enter> and walk away until further notice"
+            print "Press <enter> and walk away until you hear a beep"
             sys.stdin.readline()
             real_sleep( 3 )
         for trial in range( num_trials ):
             recordings[present].append( recordback( ping ) )
             real_sleep( 1 )
+    # beep to recall user to computer
+    play_audio( tone() )
     file = open( filename, 'wb' )
     dump( recordings, file )
     file.close()
@@ -913,8 +915,8 @@ def calibrate():
     threshold = int( ceil( not_present_var ) )
     
     write_config_file( phone_home, recording_device, freq, threshold )
-    log( "calibration frequency %d threshold %d device %s" % 
-         (freq,threshold,recording_device) )
+    log( "calibration frequency %d threshold %d device %s present %f not_present %f" % 
+         (freq,threshold,recording_device,present_var,not_present_var) )
 
 def write_config_file( phone_home, recording_device, freq, threshold ):
     """Writes a configuration file with the passed values.  Note that the
