@@ -886,7 +886,7 @@ def calibrate():
 
     # create directory, if necessary
     from os.path import isdir
-    from os import mkdir
+    from os import mkdir, remove
     if not isdir( CONFIG_DIR_PATH ):
         mkdir( CONFIG_DIR_PATH )
 
@@ -910,6 +910,7 @@ def calibrate():
     calibration_file = CONFIG_DIR_PATH + 'calibration.dat'
     write_recordings( ping, calibration_file, TRAINING_TRIALS )
     rec = read_recordings( calibration_file )
+    remove( calibration_file )
     mean = empty( (2,TRAINING_TRIALS) )
     var = empty( (2,TRAINING_TRIALS) )
     for p in [0,1]:
