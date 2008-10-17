@@ -19,10 +19,12 @@ REC_DEV='/dev/dsp2' # default
 #----------------------------------------------------------------------------
 # Constants
 #----------------------------------------------------------------------------
+SW_VER='1.0'
 SPEAKER='right' # 'left'
 REQD_GAIN = 5 # this is the required minimum gain determining the ping freq
 TONE_LENGTH = 5 # ping length
 IDLE_THRESH = TONE_LENGTH # period of input inactivity required, in seconds
+CONFIDENCE_THRESH = 10 # cutoff for reliable presence detection
 LOG_ADDR = 'starzia@northwestern.edu'
 SMTP_SERVER = 'hecky.it.northwestern.edu'
 from os.path import expanduser
@@ -854,16 +856,22 @@ def choose_ping_freq():
     silence_rec = recordback( silence )
     silence_reading=1
     blip_reading=1
-    freq = 22000
+    start_freq = 22000
+    freq = start_freq
     # below, we subtract two readings because they are logarithms
-    while( freq > 1000 and blip_reading-silence_reading < REQD_GAIN ):
-        freq *= 0.9
+    scaling_factor = 0.95
+    while 1:
+        freq *= scaling_factor
         blip = tone( TONE_LENGTH, freq )
         rec = recordback( blip )
         [ blip_reading, blip_var ] = measure_stats( rec, freq )
         [ silence_reading, silence_var ] = measure_stats( silence_rec, freq )
-        print "blip: %f silence: %f" % (blip_reading,silence_reading)
-    if( freq <= 1000 ): raise RuntimeError
+        if DEBUG: print "blip: %f silence: %f" % (blip_reading,silence_reading)
+        print "Did you just hear an annoying high frequency tone? [no]"
+        line = sys.stdin.readline().strip()
+        if line == 'yes' or line == 'Yes' or line == 'YES' or line == 'yea':
+            freq /= scaling_factor
+            break
     freq = int( freq )
     print "chose frequency of %d" % (freq,)
     return freq
@@ -887,11 +895,16 @@ def choose_ping_threshold( freq ):
     print "variances: present: %f not_present %f" % ( present_var, 
                                                       not_present_var )
     threshold = int( ceil( not_present_var ) )    
-    confidence = present_var/not_present_var
+    confidence = present_var - not_present_var
+    if confidence < CONFIDENCE_THRESH:
+        print "Confidence is too low.  CANNOT CONTINUE!"
+        phone_home_low_confidence()
+        raise RuntimeError
     return [ threshold, confidence ]
 
 def choose_recording_device():
-    """Prompt the user to choose their preferred recording device."""
+    """Prompt the user to choose their preferred recording device.  This must
+    be done before any audio recording can take place."""
     print "Please enter your OSS recording device [/dev/dsp]:"
     line = sys.stdin.readline().rstrip()
     if line == "":
@@ -905,7 +918,6 @@ def choose_recording_device():
 def calibrate():
     """Runs some tests and then creates a configuration file in the user's
     home directory"""
-
     print """
     In order to improve upon future versions of this software, we ask that you
     allow us to collect a log of software events.  No personal information, 
@@ -949,8 +961,8 @@ def calibrate():
     [threshold,confidence] = choose_ping_threshold( freq )
 
     write_config_file( phone_home, recording_device, freq, threshold )
-    log( "calibration frequency %d threshold %d device %s confidence %f" % 
-         (freq,threshold,recording_device,confidence) )
+    log( "calibration: version %s frequency %d threshold %d device %s confidence %f" % 
+         (SW_VER,freq,threshold,recording_device,confidence) )
 
 def write_config_file( phone_home, recording_device, freq, threshold ):
     """Writes a configuration file with the passed values.  Note that the
