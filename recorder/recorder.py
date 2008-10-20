@@ -585,10 +585,13 @@ def ping_loop( freq, length=TONE_LENGTH ):
         real_sleep( SLEEP_TIME )
     return
 
-def measure_stats( audio_buffer, freq, polling_interval=0.2 ):
+def measure_stats( audio_buffer, freq ):
     """Returns the mean and variance of the intensities of a given frequency
     in the audio buffer sampled in windows spread throughout the recording."""
-    DUTY = 0.1 # duty cycle for audio analysis
+    NUM_SAMPLES = 10 # the number of windows to create within the audio buffer
+    DUTY = 0.2 # duty cycle for audio analysis
+    polling_interval = audio_length( audio_buffer ) / NUM_SAMPLES
+    
     intensities = []
     t=REC_PADDING
     while( t < audio_length( audio_buffer ) ):
