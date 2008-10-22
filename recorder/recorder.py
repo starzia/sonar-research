@@ -61,7 +61,7 @@ def open_rec_dev():
 
     # adjust mixer level for inputs to maximum volume
     inputs = [ ossaudiodev.SOUND_MIXER_MIC,
-               ossaudiodev.SOUND_MIXER_MIC_LEV,
+               ossaudiodev.SOUND_MIXER_RECLEV,
                ossaudiodev.SOUND_MIXER_DIGITAL1,
                ossaudiodev.SOUND_MIXER_IGAIN,
                ossaudiodev.SOUND_MIXER_LINE,
