@@ -14,7 +14,7 @@ import sys,ossaudiodev,wave, audioop
 #----------------------------------------------------------------------------
 PHONE_HOME = 'decline' # default
 LOG_START_TIME = 9999999999 # default
-REC_DEV='/dev/dsp1' # default
+REC_DEV='/dev/dsp' # default
 
 #----------------------------------------------------------------------------
 # Constants
