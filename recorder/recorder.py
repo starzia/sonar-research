@@ -890,6 +890,12 @@ def choose_ping_freq():
         if line == 'yes' or line == 'Yes' or line == 'YES' or line == 'yea':
             freq /= scaling_factor
             break
+    if freq >= start_freq:
+        print "Your hearing is too good (or your speakers are too noisy)."
+        print "CANNOT CONTINUE"
+        log( "freq>=start_freq" )
+        phone_home()
+        raise SystemExit
     freq = int( freq )
     print "chose frequency of %d" % (freq,)
     return freq

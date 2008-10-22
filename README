@@ -1,0 +1,17 @@
+DEPENDENCIES:
+--------------
+A standard Python distribution is required.  It was tested on version 2.5.1.
+
+In order to compile the idleness_detection C code you must have certain X11
+development headers and libraries present.  For example, on Fedora the 
+'libXScrnSaver-devel' package and its dependencies are required.
+
+
+COMPILATION:
+-------------
+'make'
+
+
+USAGE:
+------
+'./sonarPM'
