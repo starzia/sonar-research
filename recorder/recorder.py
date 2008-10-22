@@ -744,10 +744,10 @@ def write_recordings( ping, filename, num_trials=TRAINING_TRIALS ):
     recordings = [[],[]]
     for present in  [ 1, 0 ]:
         if present:
-            print "Press <enter> and sit still until further notice"
+            print "Press <enter> and sit in front of the computer until further notice"
             sys.stdin.readline()
         else:
-            print "Press <enter> and stay away until you hear a beep"
+            print "Press <enter>, leave the computer, and stay away until you hear a beep"
             sys.stdin.readline()
             real_sleep( 3 )
         for trial in range( num_trials ):
@@ -820,6 +820,9 @@ def power_management( freq=19466, threshold=40 ):
     signal( SIGTERM, term_handler )
     signal( SIGINT, term_handler )
 
+    global LOG_START_TIME
+    LOG_START_TIME = log_start_time()
+
     log( "sonar power management began" )
     blip = tone( TONE_LENGTH, freq )
     while( 1 ):
@@ -844,8 +847,7 @@ def power_management( freq=19466, threshold=40 ):
         real_sleep( SLEEP_TIME )
 
         # if TRIAL_PERIOD has elapsed, phone home (if enabled)
-        if ( PHONE_HOME == 'send' and 
-             time.time() - LOG_START_TIME > TRIAL_PERIOD ):
+        if ( time.time() - LOG_START_TIME > TRIAL_PERIOD ):
             phone_home()
 
 def choose_ping_freq():
@@ -854,7 +856,16 @@ def choose_ping_freq():
     register on the (probably cheap) audio equipment but high enough to be
     inaudible."""
     # We start with 20khz and reduce it until we get a reading on the mic.
-    print 'Please wait while we find your highest sensitive frequency.'
+    print """
+    This power management system uses sonar to detect whether you are sitting
+    in front of the computer.  This means that the computer plays a very high
+    frequency sound while recording the echo of that sound (and then doing
+    some signal processing).  The calibration procedure that follows will try
+    to choose a sound frequency that is low enough to register on your
+    computer's microphone but high enough to be inaudible to you.  Note that
+    younger persons and animals are generally more sensitive to high frequency
+    noises.  Therefore, we advise you not to use this software in the company
+    of children or pets."""
     silence = tone( TONE_LENGTH, 0 )
     silence_rec = recordback( silence )
     silence_reading=1
@@ -863,6 +874,10 @@ def choose_ping_freq():
     freq = start_freq
     # below, we subtract two readings because they are logarithms
     scaling_factor = 0.95
+    print """
+    Please press <enter> and listen carefully to continue with the 
+    calibration."""
+    sys.stdin.readline()
     while 1:
         freq *= scaling_factor
         blip = tone( TONE_LENGTH, freq )
@@ -901,13 +916,15 @@ def choose_ping_threshold( freq ):
     confidence = present_var - not_present_var
     if confidence < CONFIDENCE_THRESH:
         print "Confidence is too low.  CANNOT CONTINUE!"
-        phone_home_low_confidence()
-        raise RuntimeError
+        log( "low confidence" )
+        phone_home()
+        raise SystemExit
     return [ threshold, confidence ]
 
 def choose_recording_device():
     """Prompt the user to choose their preferred recording device.  This must
     be done before any audio recording can take place."""
+    print "Audio playback will be done through the default ALSA device."
     print "Please enter your OSS recording device [/dev/dsp]:"
     line = sys.stdin.readline().rstrip()
     if line == "":
@@ -915,27 +932,57 @@ def choose_recording_device():
     recording_device = line
     global REC_DEV
     REC_DEV = recording_device
-    print "Audio playback will be done through the default ALSA device."
     return recording_device
 
 def calibrate():
     """Runs some tests and then creates a configuration file in the user's
     home directory"""
     print """
+==============================================================================
     In order to improve upon future versions of this software, we ask that you
     allow us to collect a log of software events.  No personal information, 
-    including identifying information, will be collected.  A log would be sent
-    only ONCE, after the first week of usage.  You may view the contents of 
-    the log at:
+    including identifying information, will be collected.  The following is an
+    example of the kind of imformation that would be collected:
+
+2008/10/13 16:05:26 (1223931926): calibration frequency 17820 threshold 11 \
+device /dev/dsp1
+2008/10/13 16:08:41 (1223932121): sonar power management began
+2008/10/13 16:08:48 (1223932128): idle
+2008/10/13 16:08:55 (1223932135): first sonar is 6
+2008/10/13 16:08:58 (1223932138): idle
+2008/10/13 16:09:06 (1223932146): first sonar is 1
+2008/10/13 16:09:08 (1223932148): idle
+2008/10/13 16:09:16 (1223932156): first sonar is 6
+2008/10/13 16:09:18 (1223932158): idle
+2008/10/13 16:09:26 (1223932166): first sonar is 0
+2008/10/13 16:09:26 (1223932166): standby
+2008/10/13 16:09:26 (1223932166): active
+2008/10/13 16:13:06 (1223932386): idle
+2008/10/13 16:13:14 (1223932394): first sonar is 7
+2008/10/13 16:14:01 (1223932441): idle
+2008/10/13 16:14:08 (1223932448): first sonar is 6
+2008/10/13 16:14:11 (1223932451): sonar power management terminated
+
+    A log would be sent twice: first after calibration is completed and second
+    after the first week of usage.  Sending the first message allows us to
+    estimate the percentage of users that have "dropped out" before
+    the one week period.  After you delete the local copy of your 
+    logfile, there will be no way to associate an entry in our database with 
+    your machine.  The source IP address of your messages will be scrubbed
+    from our database.
+
+    You may view the contents of the log at:
       %s""" % ( LOG_FILE_PATH, )
     phone_home = ""
     while phone_home != "send" and phone_home != "decline":
         print """
-        Please type 'send' now to approve the emailing of your log file one
-        week from now.  Otherwise, type 'decline':"""
+        Please type 'send' now to approve the automatic emailing of your log 
+        file after calibration and one week from now.  
+        Otherwise, type 'decline':"""
         phone_home = sys.stdin.readline().rstrip()
 
     print """
+==============================================================================
     A short calibration procedure is now required in order to match
     the sonar system's parameters to your speakers, microphone, and the
     acoustics of your room.
@@ -995,14 +1042,15 @@ def load_config_file():
         return load_config_file()
     else:
         print "Config file found."
+        global REC_DEV, PHONE_HOME
         from ConfigParser import ConfigParser
         config = ConfigParser()
         config.read( CONFIG_FILE_PATH )
-        phone_home = config.get( 'general', 'phone_home' )
-        rec_dev = config.get( 'general', 'recording_device' )
+        PHONE_HOME = config.get( 'general', 'phone_home' )
+        REC_DEV = config.get( 'general', 'recording_device' )
         freq = int( config.get( 'calibration', 'frequency' ) )
         threshold = int( config.get( 'calibration', 'threshold' ) )
-        return [phone_home, rec_dev, freq, threshold]
+        return [freq, threshold]
 
 def disable_phone_home():
     """rewrite configuration file to disable phoning home."""
@@ -1011,6 +1059,9 @@ def disable_phone_home():
 
 def phone_home( dest_addr=LOG_ADDR, smtp_server=SMTP_SERVER ):
     """emails log.txt to us.  Also, disable future phoning home."""
+    if PHONE_HOME != 'send':
+        return # phone home disabled
+
     from smtplib import SMTP
     from_addr = 'user@localhost'
     msg = ("From: %s\r\nTo: %s\r\nSubject: sonarPM phone home\r\n\r\n"
@@ -1043,9 +1094,7 @@ def log_start_time():
         return int( toks[2].strip('():') )
 
 def main():
-    global REC_DEV, PHONE_HOME, LOG_START_TIME
-    [ PHONE_HOME, REC_DEV, freq, threshold ] = load_config_file()
-    LOG_START_TIME = log_start_time()
+    [ freq, threshold ] = load_config_file()
     power_management( freq, threshold )
     return
 

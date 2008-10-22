@@ -1,3 +1,6 @@
+/* The following headers are provided by these packages on a Redhat system:
+ * libX11-devel, libXext-devel, libScrnSaver-devel
+ * There are also some additional dependencies for libX11-devel */
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xos.h>
