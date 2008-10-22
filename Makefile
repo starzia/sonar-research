@@ -3,3 +3,4 @@ all:
 
 clean:
 	make -C idle_detection clean
+	rm -f */*~ *~
