@@ -6,6 +6,10 @@ In order to compile the idleness_detection C code you must have certain X11
 development headers and libraries present.  For example, on Fedora the 
 'libXScrnSaver-devel' package and its dependencies are required.
 
+'/usr/bin/xset dpms force standby' is used to sleep the monitor.
+
+/usr/bin/aplay is also required.  This should be included with any ALSA
+package.
 
 COMPILATION:
 -------------
@@ -15,3 +19,5 @@ COMPILATION:
 USAGE:
 ------
 './sonarPM'
+
+Note that it must be run from inside an X session.
