@@ -403,10 +403,11 @@ def play_audio( audio_buffer ):
     """plays an audio clip.  This should return
     immediately after the tone STARTS playback."""
     if DEBUG: print 'Playing...'
-    write_audio( audio_buffer, 'tone.wav' )
+    tmp_wav_file = CONFIG_DIR_PATH + "tone.wav"
+    write_audio( audio_buffer, tmp_wav_file )
 
     ## spawn background process to playback tone
-    subprocess.Popen(["/usr/bin/aplay", "-q", "tone.wav"])
+    subprocess.Popen(["/usr/bin/aplay", "-q", tmp_wav_file])
     #play_dev.write( audio_buffer )
 
 def play_tone( tone_length, tone_freq ):
@@ -425,7 +426,7 @@ def record_audio( seconds ):
     rec = rec_dev.read( rec_bytes )
 
     # write recording to out.wav for debugging
-    write_audio( rec, 'out.wav' )
+    if DEBUG: write_audio( rec, 'out.wav' )
 
     # close audio devices
     # A freshly opened audio device seems to behave more predictably
@@ -849,6 +850,7 @@ def power_management( freq=19466, threshold=40 ):
         # if TRIAL_PERIOD has elapsed, phone home (if enabled)
         if ( time.time() - LOG_START_TIME > TRIAL_PERIOD ):
             phone_home()
+            disable_phone_home() # prevent future log emails
 
 def choose_ping_freq():
     """Prompt the user to find the best ping frequency.
@@ -986,6 +988,8 @@ device /dev/dsp1
         file after calibration and one week from now.  
         Otherwise, type 'decline':"""
         phone_home = sys.stdin.readline().rstrip()
+    global PHONE_HOME
+    PHONE_HOME = phone_home
 
     print """
 ==============================================================================
@@ -1084,8 +1088,6 @@ def phone_home( dest_addr=LOG_ADDR, smtp_server=SMTP_SERVER ):
     server.quit()
     print "Sent log email."
 
-    disable_phone_home()
-
 def log_start_time():
     """Parses the log file and returns the time of the first stamped message"""
     from os.path import exists
@@ -1101,6 +1103,7 @@ def log_start_time():
 
 def main():
     [ freq, threshold ] = load_config_file()
+    print "Sonar display power management has now begun. Hit <ctrl>-C to quit."
     power_management( freq, threshold )
     return
 
