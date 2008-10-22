@@ -14,7 +14,7 @@ import sys,ossaudiodev,wave, audioop
 #----------------------------------------------------------------------------
 PHONE_HOME = 'decline' # default
 LOG_START_TIME = 9999999999 # default
-REC_DEV='/dev/dsp2' # default
+REC_DEV='/dev/dsp1' # default
 
 #----------------------------------------------------------------------------
 # Constants
@@ -58,6 +58,22 @@ def open_rec_dev():
     if DEBUG: print 'Opening audio device...'
     rec_dev = ossaudiodev.open( REC_DEV, 'r' )
     rec_dev.setparameters( ossaudiodev.AFMT_S16_LE, 1, RATE )
+
+    # adjust mixer level for inputs to maximum volume
+    inputs = [ ossaudiodev.SOUND_MIXER_MIC,
+               ossaudiodev.SOUND_MIXER_MIC_LEV,
+               ossaudiodev.SOUND_MIXER_DIGITAL1,
+               ossaudiodev.SOUND_MIXER_IGAIN,
+               ossaudiodev.SOUND_MIXER_LINE,
+               ossaudiodev.SOUND_MIXER_LINE1,
+               ossaudiodev.SOUND_MIXER_PHONEIN ]
+    mixer=ossaudiodev.openmixer()
+    for i in inputs:
+        # if the recording device has such a channel, boost its level
+        if mixer.controls() & (1 << i):
+            mixer.set( i, (100,100) )
+    mixer.close()
+    
     return rec_dev
 
 def log_spacing_interval( start_freq, end_freq, num_steps ):
