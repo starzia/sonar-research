@@ -829,7 +829,7 @@ def term_handler( signum, frame ):
     log( "sonar power management terminated" )
     raise SystemExit
 
-def power_management( freq=19466, threshold ):
+def power_management( freq, threshold ):
     """infinite loop that checks for idleness then shuts off monitor if
     sonar does not detect user"""
     # register signal handler for program termination
