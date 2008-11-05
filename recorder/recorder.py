@@ -1026,6 +1026,13 @@ device /dev/dsp1
     Press <enter> to continue""" % (CONFIG_FILE_PATH,)
     sys.stdin.readline()
 
+    print """
+    A two second tone will now be played.  Please use this as a reference for
+    adjusting your volume level.  If the tone is very loud, then please turn
+    down the volume level!
+    """
+    play_tone( 2, 1000 )
+
     # create configuration directory, if necessary
     from os.path import isdir
     from os import mkdir
