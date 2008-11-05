@@ -958,6 +958,15 @@ def choose_recording_device():
     REC_DEV = recording_device
     return recording_device
 
+def warn_audio_level():
+    """Plays a lound tone to persuade users to turn down their volume level"""
+    print """
+    A two second tone will now be played.  Please use this as a reference for
+    adjusting your volume level.  If the tone is very loud, then please turn
+    down the volume level!
+    """
+    play_tone( 2, 1000 )
+
 def calibrate():
     """Runs some tests and then creates a configuration file in the user's
     home directory"""
@@ -1025,14 +1034,7 @@ device /dev/dsp1
 
     Press <enter> to continue""" % (CONFIG_FILE_PATH,)
     sys.stdin.readline()
-
-    print """
-    A two second tone will now be played.  Please use this as a reference for
-    adjusting your volume level.  If the tone is very loud, then please turn
-    down the volume level!
-    """
-    play_tone( 2, 1000 )
-
+   
     # create configuration directory, if necessary
     from os.path import isdir
     from os import mkdir
@@ -1126,6 +1128,7 @@ def log_start_time():
 
 def main():
     [ freq, threshold ] = load_config_file()
+    warn_audio_level()
     print "Sonar display power management has now begun. Hit <ctrl>-C to quit."
     power_management( freq, threshold )
     return
