@@ -25,8 +25,8 @@ REQD_GAIN = 5 # this is the required minimum gain determining the ping freq
 TONE_LENGTH = 5 # ping length
 IDLE_THRESH = TONE_LENGTH # period of input inactivity required, in seconds
 CONFIDENCE_THRESH = 10 # cutoff for reliable presence detection
-LOG_ADDR = 'starzia@northwestern.edu'
-SMTP_SERVER = 'hecky.it.northwestern.edu'
+LOG_ADDR = 'steve@belmont.eecs.northwestern.edu'
+SMTP_SERVER = 'belmont.eecs.northwestern.edu'
 from os.path import expanduser
 CONFIG_DIR_PATH = expanduser( '~/.sonarPM/' )
 CONFIG_FILE_PATH = CONFIG_DIR_PATH + 'sonarPM.cfg'
@@ -845,22 +845,23 @@ def power_management( freq, threshold ):
     while( 1 ):
         if( idle_seconds() > IDLE_THRESH ):
             log( "idle" )
-            rec = recordback( blip )
-            [ mean, variance ] = measure_stats( rec, freq )
-            log( "first sonar is %d" % (variance,) )
-            print "var=%d\tmean=%d" % ( int(variance), int(mean) )
-            if( variance <= threshold and idle_seconds() > IDLE_THRESH ):
+            sleep=1
+            for iter in ['first', 'second']:
                 rec = recordback( blip )
                 [ mean, variance ] = measure_stats( rec, freq )
-                log( "second sonar is %d" % (variance,) )
+                log( "%s sonar is %d" % (iter,variance) )
                 print "var=%d\tmean=%d" % ( int(variance), int(mean) )
-                if( variance <= threshold and idle_seconds() > IDLE_THRESH ):
-                    log( "standby" )
-                    sleep_monitor()
-                    # wait until active again
-                    while( idle_seconds() < 0 ):
-                        real_sleep( 2 )
-                    log( "active" )
+                if( variance > threshold or idle_seconds() < IDLE_THRESH ):
+                    sleep=0
+                    break
+            if sleep:
+                log( "standby" )
+                sleep_monitor()
+                # wait until active again
+                while( idle_seconds() < 0 ):
+                    real_sleep( 2 )
+                log( "active" )
+
         real_sleep( SLEEP_TIME )
 
         # if TRIAL_PERIOD has elapsed, phone home (if enabled)
@@ -966,6 +967,7 @@ def warn_audio_level():
     down the volume level!
     """
     play_tone( 2, 1000 )
+    real_sleep( 2 ) # must sleep because play_tone is asynch
 
 def calibrate():
     """Runs some tests and then creates a configuration file in the user's
@@ -1089,8 +1091,11 @@ def load_config_file():
 
 def disable_phone_home():
     """rewrite configuration file to disable phoning home."""
-    [phone_home,rec_dev,freq,threshold] = load_config_file()
-    write_config_file( 'decline', rec_dev, freq, threshold )
+    global PHONE_HOME,REC_DEV
+    if PHONE_HOME == 'send':
+        PHONE_HOME='decline'
+        [freq,threshold] = load_config_file()
+        write_config_file( PHONE_HOME, REC_DEV, freq, threshold )
 
 def phone_home( dest_addr=LOG_ADDR, smtp_server=SMTP_SERVER ):
     """emails log.txt to us.  Also, disable future phoning home."""
