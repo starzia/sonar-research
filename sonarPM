@@ -1,2 +1,4 @@
 #!/bin/sh
 $(dirname $(echo $0))/recorder/recorder.py
+echo "press <enter> to quit"
+read
