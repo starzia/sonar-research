@@ -24,7 +24,7 @@ SPEAKER='right' # 'left'
 REQD_GAIN = 5 # this is the required minimum gain determining the ping freq
 TONE_LENGTH = 5 # ping length
 IDLE_THRESH = TONE_LENGTH # period of input inactivity required, in seconds
-CONFIDENCE_THRESH = 10 # cutoff for reliable presence detection
+CONFIDENCE_THRESH = 5 # cutoff for reliable presence detection
 LOG_ADDR = 'steve@belmont.eecs.northwestern.edu'
 SMTP_SERVER = 'belmont.eecs.northwestern.edu'
 from os.path import expanduser
@@ -60,13 +60,7 @@ def open_rec_dev():
     rec_dev.setparameters( ossaudiodev.AFMT_S16_LE, 1, RATE )
 
     # adjust mixer level for inputs to maximum volume
-    inputs = [ ossaudiodev.SOUND_MIXER_MIC,
-               ossaudiodev.SOUND_MIXER_RECLEV,
-               ossaudiodev.SOUND_MIXER_DIGITAL1,
-               ossaudiodev.SOUND_MIXER_IGAIN,
-               ossaudiodev.SOUND_MIXER_LINE,
-               ossaudiodev.SOUND_MIXER_LINE1,
-               ossaudiodev.SOUND_MIXER_PHONEIN ]
+    inputs = [ ossaudiodev.SOUND_MIXER_RECLEV ]
     mixer=ossaudiodev.openmixer()
     for i in inputs:
         # if the recording device has such a channel, boost its level
