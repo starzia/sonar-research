@@ -268,7 +268,7 @@ def measure_stats( audio_buffer, freq ):
     
     intensities = []
     t=REC_PADDING
-    while( t < audio_length( audio_buffer ) ):
+    while( t < audio_length( audio_buffer ) - polling_interval*DUTY ):
         intensities.append( freq_energy( audio_window( audio_buffer,
                                                        polling_interval*DUTY, 
                                                        t ),
