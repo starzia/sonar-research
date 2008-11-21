@@ -323,6 +323,7 @@ def power_management( freq, threshold ):
             if sleep:
                 log( "standby" )
                 sleep_monitor()
+                real_sleep( 1 ) # wait for display state to be updated
                 # wait until active again
                 while( idle_seconds() < 0 ):
                     real_sleep( 2 )
