@@ -380,7 +380,7 @@ def choose_ping_freq():
         [ blip_reading, blip_var ] = measure_stats( rec, freq )
         [ silence_reading, silence_var ] = measure_stats( silence_rec, freq )
         if DEBUG: print "blip: %f silence: %f" % (blip_reading,silence_reading)
-        print "Did you just hear an annoying high frequency tone? [no]"
+        print "Did you just hear a high frequency (%dHz) tone? [no]" %int(freq)
         line = sys.stdin.readline().strip()
         if line == 'yes' or line == 'Yes' or line == 'YES' or line == 'yea':
             freq /= scaling_factor
@@ -436,15 +436,34 @@ def choose_recording_device():
     return recording_device
 
 def warn_audio_level():
-    """Plays a lound tone to persuade users to turn down their volume level"""
+    """Plays a loud tone to persuade users to turn down their volume level"""
+    beep = tone( 0.5, 1000 )
     print """
-    A two second tone will now be played.  Please use this as a reference for
-    adjusting your volume level.  If the tone is very loud, then please turn
-    down the volume level!
-    """
-    play_tone( 2, 1000 )
-    real_sleep( 2 ) # must sleep because play_tone is asynch
+    A series of tones will now be played.  Please use these as references for
+    adjusting your volume level.  The tones should be clearly audible but not
+    uncomfortably loud.
 
+    Press <enter> after you've adjusted the volume level.
+    """
+    def alrm_handler(signum, frame):
+        return 
+
+    from signal import signal, alarm, SIGALRM
+    TIMEOUT = 2 # number of seconds your want for timeout
+    while( 1 ):
+        signal( SIGALRM, alrm_handler ) # catch ALRM with dummy handler
+        alarm(TIMEOUT)
+        try:
+            play_audio( beep )
+            real_sleep( 0.5 ) # must sleep because playback is non-blocking
+            # wait for input
+            sys.stdin.readline()
+            # if user hits enter before timeout, then break out of loop
+            break
+        except:
+            # timeout
+            continue
+            
 def calibrate():
     """Runs some tests and then creates a configuration file in the user's
     home directory"""
@@ -520,6 +539,7 @@ device /dev/dsp1
         mkdir( CONFIG_DIR_PATH )
 
     recording_device = choose_recording_device()
+    warn_audio_level()
     freq = choose_ping_freq()
     [threshold,confidence] = choose_ping_threshold( freq )
 
