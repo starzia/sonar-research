@@ -1,3 +1,5 @@
+from recorder import *
+
 #----------------------------------------------------------------------------
 # Constants
 #----------------------------------------------------------------------------
@@ -531,3 +533,28 @@ def sweep_freq( trials=TRAINING_TRIALS,
     [F,Y] = trim_to_range( F, Y, start_freq, end_freq )
     return [F,Y]
 
+def freq_energy2( audio_buffer, freq_of_interest ):
+    """returns the power/energy of the given time series data at the frequency
+    of interest."""
+    [F,Y] = energy_spectrum( audio_buffer, FFT_POINTS )
+    return Y[ freq_index(freq_of_interest) ]
+
+def measure_stats2( audio_buffer, freq ):
+    """Returns the mean and variance of the intensities of a given frequency
+    in the audio buffer sampled in windows spread throughout the recording."""
+    NUM_SAMPLES = 5 # the number of windows to create within the audio buffer
+    DUTY = 1 # duty cycle for audio analysis
+    polling_interval = audio_length( audio_buffer ) / NUM_SAMPLES
+    
+    intensities = []
+    t=REC_PADDING
+    while( t < audio_length( audio_buffer )-polling_interval ):
+        intensities.append( freq_energy2( audio_window( audio_buffer,
+                                                        polling_interval*DUTY, 
+                                                        t ),
+                                          freq ) )
+        t += polling_interval
+    intensities = log10( array( intensities ) )
+    variance = 1000*intensities.var()
+    mean = 10*intensities.mean()
+    return [ mean, variance ]
