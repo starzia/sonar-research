@@ -65,9 +65,12 @@ def open_rec_dev():
     return rec_dev
 
 # sample format is S16_LE
-def tone( duration=0.5, freq=440, delay=0 ):
-    """duration is in seconds and freq is the
-    tone pitch.  Returned as a sound buffer"""
+def tone( duration=0.5, freq=440, delay=0, FADE_SAMPLES=44 ):
+    """duration is in seconds and freq is the  tone pitch.  
+    Delay, in seconds, is silent time added to before tone.
+    FADE_SAMPLES is the length of the fade in and out periods.
+    Returned as a sound buffer"""
+
     tone_length = int(math.floor( duration * RATE ))
     # the following will change for formats other than 16 bit signed
     # intialize array
@@ -77,6 +80,12 @@ def tone( duration=0.5, freq=440, delay=0 ):
     for t in range( tone_length ):
         data[t] = int(round(
             volumeScale * math.sin( 2 * math.pi * t/RATE * freq ) ) )
+
+    # fade in and fade out to prevent 'click' sound.
+    for i in range( 0, FADE_SAMPLES ):
+        attenuation = float(i)/FADE_SAMPLES
+        data[i] = int( attenuation * data[i] )
+        data[tone_length-1-i] = int( attenuation * data[tone_length-1-i] )
 
     data = prepend_silence( data, delay )
     return data.tostring()
