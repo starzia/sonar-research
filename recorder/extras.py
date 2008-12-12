@@ -571,7 +571,7 @@ def randomly_order( my_list ):
 def local_user_study( ping_filename="ping.wav", data_filename="trials.dat",
                       alsa_rec_dev_list=["default"],
                       alsa_play_dev_list=["default"],
-                      num_channels=1, seconds_per_echo=60 ):
+                      seconds_per_echo=60 ):
     """This is the script for the local user study.  Randomly orders the study
     tasks, and helps the administrator to guide the user through them while
     playing and recording the ping.
@@ -598,13 +598,13 @@ def local_user_study( ping_filename="ping.wav", data_filename="trials.dat",
     print "task_order is going to be %s" % task_order
 
     # choose a random ordering of the playback devices
-    play_dev_order.append( "null" ) # bg_noise recording
     play_dev_order = randomly_order( alsa_play_dev_list )
 
     # user tasks
     for i in task_order:
         print "Next task is %s.  Press <enter> to begin." % tasks[i]
         sys.stdin.readline()
+        print " stalling before recording starts..."
         # wait a little while to let the user settle down
         real_sleep( 10 )
 
@@ -612,11 +612,11 @@ def local_user_study( ping_filename="ping.wav", data_filename="trials.dat",
         recorder_list = [] # this the the list of recording subrocesses
         for j in range( len(alsa_rec_dev_list) ):
             rec_filename = "%03d.%s.%d.wav" % (id,i,j)
-            recorder_list.append( subprocess.Popen(["/usr/bin/arecord", 
+            recorder_list.append( subprocess.Popen(["arecord", 
                                           ("--device=%s"%alsa_rec_dev_list[j]),
-                                          "--rate=44100", 
+                                          ("--rate=%d"%RATE), 
                                           "--format=S16_LE",
-                                          ("--channels=%d"%num_channels),
+                                          "--channels=1",
                                           "--quiet", 
                                           rec_filename]) )
         print "Microphones activated."
@@ -624,20 +624,23 @@ def local_user_study( ping_filename="ping.wav", data_filename="trials.dat",
         # cycle through the playback devices
         for j in play_dev_order:
             # spawn background process to playback ping tone
-            player = subprocess.Popen(["/usr/bin/aplay","--quiet",ping_filename])
+            player = subprocess.Popen(["aplay",
+                                       ("--device=%s" % j),
+                                       "--quiet",
+                                       ping_filename])
             print "Playback device %s activated." % j
-            sleep( seconds_per_echo )
+            time.sleep( seconds_per_echo )
             # stop the player
-            subprocess.Popen([ "/usr/bin/kill", ("%s"%player.pid) ])
+            subprocess.Popen([ "kill", ("%s"%player.pid) ])
 
         # stop each recorder
         for recorder in recorder_list:
-            subprocess.Popen(["/usr/bin/kill", ("%s"%recorder.pid)])
+            subprocess.Popen(["kill", ("%s"%recorder.pid)])
         print "Recording stopped."
 
     # write new data for this user
     f=open(data_filename, 'a')
-    f.write( "%03d %s %s\n" % (id,start_time_str,task_order) )
+    f.write( "%03d %s %s %s\n" % (id,start_time_str,task_order,play_dev_order) )
     f.close()
 
 if __name__ == "__main__": local_user_study()

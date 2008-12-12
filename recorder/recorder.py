@@ -14,7 +14,7 @@ import sys,ossaudiodev,wave, audioop
 #----------------------------------------------------------------------------
 PHONE_HOME = 'decline' # default
 LOG_START_TIME = 9999999999 # default
-REC_DEV='/dev/dsp1' # default
+REC_DEV='/dev/dsp' # default
 
 #----------------------------------------------------------------------------
 # Constants
@@ -32,7 +32,8 @@ CONFIG_FILE_PATH = CONFIG_DIR_PATH + 'sonarPM.cfg'
 LOG_FILE_PATH = CONFIG_DIR_PATH + 'log.txt'
 TRIAL_PERIOD = 604800 # one week, in seconds
 INT16_MAX = 32767
-RATE=44100
+RATE=96000
+#RATE=44100
 TONE_VOLUME= 0.1 # one a scale from 0 to 1
 REC_PADDING = 0.2 # amount of extra time to recordback to account for lack of
                 # playback/record synchronization
@@ -236,7 +237,7 @@ def play_audio( audio_buffer ):
     write_audio( audio_buffer, tmp_wav_file )
 
     ## spawn background process to playback tone
-    subprocess.Popen(["/usr/bin/aplay", "-q", tmp_wav_file])
+    subprocess.Popen(["aplay", "-q", tmp_wav_file])
     #play_dev.write( audio_buffer )
 
 def play_tone( tone_length, tone_freq ):
