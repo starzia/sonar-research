@@ -32,8 +32,8 @@ CONFIG_FILE_PATH = CONFIG_DIR_PATH + 'sonarPM.cfg'
 LOG_FILE_PATH = CONFIG_DIR_PATH + 'log.txt'
 TRIAL_PERIOD = 604800 # one week, in seconds
 INT16_MAX = 32767
-RATE=96000
-#RATE=44100
+#RATE=96000
+RATE=44100
 TONE_VOLUME= 0.1 # one a scale from 0 to 1
 REC_PADDING = 0.2 # amount of extra time to recordback to account for lack of
                 # playback/record synchronization
@@ -66,13 +66,14 @@ def open_rec_dev():
     return rec_dev
 
 # sample format is S16_LE
-def tone( duration=0.5, freq=440, delay=0, FADE_SAMPLES=44 ):
+def tone( duration=0.5, freq=440, delay=0, FADE_SAMPLES=44, 
+          sample_rate=RATE ):
     """duration is in seconds and freq is the  tone pitch.  
     Delay, in seconds, is silent time added to before tone.
     FADE_SAMPLES is the length of the fade in and out periods.
     Returned as a sound buffer"""
 
-    tone_length = int(math.floor( duration * RATE ))
+    tone_length = int(math.floor( duration * sample_rate ))
     # the following will change for formats other than 16 bit signed
     # intialize array
     data = empty( (tone_length, 1), dtype=int16  )
@@ -80,7 +81,7 @@ def tone( duration=0.5, freq=440, delay=0, FADE_SAMPLES=44 ):
     volumeScale = (TONE_VOLUME)*INT16_MAX
     for t in range( tone_length ):
         data[t] = int(round(
-            volumeScale * math.sin( 2 * math.pi * t/RATE * freq ) ) )
+            volumeScale * math.sin( 2 * math.pi * t/sample_rate * freq ) ) )
 
     # fade in and fade out to prevent 'click' sound.
     for i in range( 0, FADE_SAMPLES ):
@@ -91,9 +92,9 @@ def tone( duration=0.5, freq=440, delay=0, FADE_SAMPLES=44 ):
     data = prepend_silence( data, delay )
     return data.tostring()
 
-def prepend_silence( audio, silence_duration ):
+def prepend_silence( audio, silence_duration, sample_rate=RATE ):
     """prepend silence_duration seconds of silence to the audio buffer"""
-    silence_length = int(math.floor( silence_duration * RATE ))
+    silence_length = int(math.floor( silence_duration * sample_rate ))
     data = empty( (silence_length + len(audio), 1), dtype=int16  )
 
     for t in range( silence_length ):
@@ -205,7 +206,7 @@ def real_sleep( seconds ):
     while time.time() < end_time:
         time.sleep( 0.5 )
 
-def write_audio( audio_buf, filename ):
+def write_audio( audio_buf, filename, sample_rate=RATE ):
     """parameter is a mono audio file but the output file is stereo with
     silent right channel"""
     # convert mono audio buffer to stereo
@@ -218,7 +219,7 @@ def write_audio( audio_buf, filename ):
     wfile = wave.open( filename, 'w' )
     wfile.setnchannels(2)
     wfile.setsampwidth(2) # two bytes == 16 bit
-    wfile.setframerate(RATE)
+    wfile.setframerate(sample_rate)
     wfile.writeframes( audio_buf )
     wfile.close()
 

@@ -568,15 +568,16 @@ def randomly_order( my_list ):
         ordering.append( my_list.pop( random_index ) )
     return ordering
 
-def local_user_study( ping_filename="ping.wav", data_filename="trials.dat",
-                      alsa_rec_dev_list=["default"],
-                      alsa_play_dev_list=["default"],
+def local_user_study( ping_freq=20000, data_filename="trials.dat",
+                      alsa_rec_dev_list=[["default",44100]],
+                      alsa_play_dev_list=[["default",44100]],
                       seconds_per_echo=60 ):
     """This is the script for the local user study.  Randomly orders the study
     tasks, and helps the administrator to guide the user through them while
     playing and recording the ping.
     Alsa devices are listed under /proc/asound/devices.  use format 'hw:0,0'
-    and you can pass a list of several devices to record from simultaneously"""
+    and you can pass a list of several devices to record from simultaneously.
+    With each device you also pass the desired sampling rate."""
     from time import strftime
 
     start_time_str = strftime('%x %X')
@@ -592,13 +593,20 @@ def local_user_study( ping_filename="ping.wav", data_filename="trials.dat",
     tasks = [ "word processor","watch video","telephone survey","word search",
               "absent" ]
     # choose a random ordering of the first four tasks
-    options = [0,1,2,3]
-    task_order = randomly_order( options )
+    task_order = randomly_order( range( len(tasks)-1 ) )
     task_order.append( 4 ) # absent is always second to last.
     print "task_order is going to be %s" % task_order
 
     # choose a random ordering of the playback devices
-    play_dev_order = randomly_order( alsa_play_dev_list )
+    play_dev_order = randomly_order( range(len(alsa_play_dev_list)) )
+    
+    # generate ping files at different possible sample rates
+    print "generating ping wav files..."
+    sample_rates = [44100,48000,96000]
+    for rate in sample_rates:
+        ping = tone( 1, ping_freq, 0,44,rate )
+        ping = audio_repeat( ping, seconds_per_echo +10 )
+        write_audio( ping, ("ping_%d.wav"%rate), rate )
 
     # user tasks
     for i in task_order:
@@ -613,8 +621,8 @@ def local_user_study( ping_filename="ping.wav", data_filename="trials.dat",
         for j in range( len(alsa_rec_dev_list) ):
             rec_filename = "%03d.%s.%d.wav" % (id,i,j)
             recorder_list.append( subprocess.Popen(["arecord", 
-                                          ("--device=%s"%alsa_rec_dev_list[j]),
-                                          ("--rate=%d"%RATE), 
+                                          ("--device=%s"%alsa_rec_dev_list[j][0]),
+                                          ("--rate=%d"%alsa_rec_dev_list[j][1]), 
                                           "--format=S16_LE",
                                           "--channels=1",
                                           "--quiet", 
@@ -625,10 +633,10 @@ def local_user_study( ping_filename="ping.wav", data_filename="trials.dat",
         for j in play_dev_order:
             # spawn background process to playback ping tone
             player = subprocess.Popen(["aplay",
-                                       ("--device=%s" % j),
+                                       ("--device=%s" % alsa_play_dev_list[j][0]),
                                        "--quiet",
-                                       ping_filename])
-            print "Playback device %s activated." % j
+                                       ("ping_%d.wav" %alsa_play_dev_list[j][1])])
+            print "Playback device %s activated." % alsa_play_dev_list[j][0]
             time.sleep( seconds_per_echo )
             # stop the player
             subprocess.Popen([ "kill", ("%s"%player.pid) ])
