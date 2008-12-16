@@ -614,7 +614,7 @@ def local_user_study( ping_freq=20000, data_filename="trials.dat",
         sys.stdin.readline()
         print " stalling before recording starts..."
         # wait a little while to let the user settle down
-        real_sleep( 10 )
+        real_sleep( 5 )
 
         # start recording on all devices
         recorder_list = [] # this the the list of recording subrocesses

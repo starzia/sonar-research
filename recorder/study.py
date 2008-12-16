@@ -9,7 +9,7 @@ alsa_play_devs = [['default:CARD=Intel',96000],
                   ['default:CARD=Headset',96000],
                   ['null',96000]]
 try:
-    local_user_study( 20000, 'trials.dat', alsa_rec_devs,alsa_play_devs, 10 )
+    local_user_study( 20000, 'trials.dat', alsa_rec_devs,alsa_play_devs, 60 )
 except KeyboardInterrupt:
     print "cancelled by user"
     subprocess.Popen(["killall","arecord","aplay"])
