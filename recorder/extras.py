@@ -539,10 +539,9 @@ def freq_energy2( audio_buffer, freq_of_interest ):
     [F,Y] = energy_spectrum( audio_buffer, FFT_POINTS )
     return Y[ freq_index(freq_of_interest) ]
 
-def measure_stats2( audio_buffer, freq ):
+def measure_stats2( audio_buffer, freq, NUM_SAMPLES=5 ):
     """Returns the mean and variance of the intensities of a given frequency
     in the audio buffer sampled in windows spread throughout the recording."""
-    NUM_SAMPLES = 5 # the number of windows to create within the audio buffer
     DUTY = 1 # duty cycle for audio analysis
     polling_interval = audio_length( audio_buffer ) / NUM_SAMPLES
     
@@ -555,8 +554,8 @@ def measure_stats2( audio_buffer, freq ):
                                           freq ) )
         t += polling_interval
     intensities = log10( array( intensities ) )
-    variance = 1000*intensities.var()
-    mean = 10*intensities.mean()
+    variance = intensities.var()
+    mean = intensities.mean()
     return [ mean, variance ]
 
 def randomly_order( my_list ):
@@ -650,5 +649,58 @@ def local_user_study( ping_freq=20000, data_filename="trials.dat",
     f=open(data_filename, 'a')
     f.write( "%03d %s %s %s\n" % (id,start_time_str,task_order,play_dev_order) )
     f.close()
+
+def process_recordings( data_directory,
+                        play_time=60.0, divisions=[60], freq=20000 ):
+    """processes the recordings, returning a 5d array 
+        reading[user_id][state][rec_dev][play_dev][num_divisions][mean/var]
+    divisions is a list with the number of partitions to split each recording
+    into when calculating the variance of intensity."""
+    # constants
+    num_states=5
+    num_play_devs=4
+    num_rec_devs=4
+    num_divisions = len( divisions )
+
+    # parse trials.dat
+    import re
+    trials_filename = "%s/trials.dat" % data_directory
+    f = open( trials_filename, 'r' )
+    users = []
+    p_dev_mapping = []
+    for line in f:
+        m = re.search( "(.{3}).*\[.*\] \[(\d), (\d), (\d), (\d)\]", line )
+        users.append( m.group(1) )
+        p_dev_mapping.append( list( m.group(2,3,4,5) ) )
+    num_users = len( users )
+
+    reading = empty( (num_users,num_states,num_rec_devs,
+                      num_play_devs,num_divisions,2) )
+    for user_i in range( num_users ):
+        for state in range( num_states ):
+            for r_dev in range( num_rec_devs ):
+                filename= "%s/%s.%d.%d.wav"%(data_directory,users[user_i],
+                                               state,r_dev)
+                print "opening file %s" % filename
+                buf = read_audio( filename, False )
+                print " audio is %d seconds long" % audio_length( buf )
+                bufs = []
+                for i in range( num_play_devs ): bufs.append("")
+                # split recording into pieces for each playback device
+                for p_dev_i in range( num_play_devs ):
+                    p_dev = int( p_dev_mapping[user_i][p_dev_i] )
+                    bufs[ p_dev ] = audio_window( buf, play_time, 
+                                                  play_time*p_dev_i )
+                    # trim buffer to account for lack of synchrony in play/rec
+                    PADDING = 5 # 5 seconds of padding
+                    bufs[ p_dev ] = audio_window( bufs[ p_dev ], 
+                                                  play_time-2*PADDING,PADDING) 
+                # process each segment of the recording.
+                for p_dev in range( num_play_devs ):
+                    for d_i in range( num_divisions ):
+                        stats = measure_stats2( bufs[p_dev], freq, 
+                                                divisions[d_i] )
+                        reading[user_i][state][r_dev][p_dev][d_i] = stats
+    return reading
 
 if __name__ == "__main__": local_user_study()

@@ -223,12 +223,15 @@ def write_audio( audio_buf, filename, sample_rate=RATE ):
     wfile.writeframes( audio_buf )
     wfile.close()
 
-def read_audio( filename ):
+def read_audio( filename, stereo=True ):
     """reads a stereo audio file but returns a mono buffer"""
     wfile = wave.open( filename, 'r' )
     buf = wfile.readframes( wfile.getnframes() )
     # below, parameters are ( buffer, width, lfactor, rfactor)
-    return audioop.tomono( buf, 2, 1, 0 )
+    if stereo:
+        return audioop.tomono( buf, 2, 1, 0 )
+    else:
+        return buf
 
 def play_audio( audio_buffer ):
     """plays an audio clip.  This should return
