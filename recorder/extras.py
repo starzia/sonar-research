@@ -539,14 +539,13 @@ def freq_energy2( audio_buffer, freq_of_interest ):
     [F,Y] = energy_spectrum( audio_buffer, FFT_POINTS )
     return Y[ freq_index(freq_of_interest) ]
 
-def measure_stats2( audio_buffer, freq, NUM_SAMPLES=5 ):
-    """Returns the mean and variance of the intensities of a given frequency
-    in the audio buffer sampled in windows spread throughout the recording."""
+def measure_stats2( audio_buffer, freq, NUM_SAMPLES=10 ):
     DUTY = 1 # duty cycle for audio analysis
     polling_interval = audio_length( audio_buffer ) / NUM_SAMPLES
     
     intensities = []
-    t=REC_PADDING
+    t=0
+
     while( t < audio_length( audio_buffer )-polling_interval ):
         intensities.append( freq_energy2( audio_window( audio_buffer,
                                                         polling_interval*DUTY, 
@@ -554,9 +553,25 @@ def measure_stats2( audio_buffer, freq, NUM_SAMPLES=5 ):
                                           freq ) )
         t += polling_interval
     intensities = log10( array( intensities ) )
-    variance = intensities.var()
-    mean = intensities.mean()
-    return [ mean, variance ]
+    return [ intensities.mean(), intensities.var() ]
+
+def measure_stats3( audio_buffer, freq, num_divisions, NUM_SAMPLES=10 ):
+    """Divides the buffer into the specified number of divisions.
+    Each division is further divided into NUM_SAMPLES pieces.  The frequency's
+    energy is calculated in each piece and then the variance and mean is
+    calculated within each division.
+    We return the average of the means and variances across all divisions and
+    also the minimum and maximum variances among all divisions."""
+    stats = empty( (num_divisions, 2) )
+
+    window_size = audio_length( audio_buffer ) / num_divisions
+    for i in range(num_divisions):
+        window_buf = audio_window( audio_buffer, window_size,
+                                   i*window_size )
+        stats[i] = measure_stats2( window_buf, freq, NUM_SAMPLES )
+    # return [mean-mean, mean-var, max-var, min-var]
+    return [ stats[:,0].mean(), stats[:,1].mean(), 
+             stats[:,1].max(), stats[:,1].min() ]
 
 def randomly_order( my_list ):
     """returns a random permutation of the passed list."""
@@ -675,7 +690,7 @@ def process_recordings( data_directory,
     num_users = len( users )
 
     reading = empty( (num_users,num_states,num_rec_devs,
-                      num_play_devs,num_divisions,2) )
+                      num_play_devs,num_divisions,4) ) # 4 is size of stats
     for user_i in range( num_users ):
         for state in range( num_states ):
             for r_dev in range( num_rec_devs ):
@@ -698,9 +713,10 @@ def process_recordings( data_directory,
                 # process each segment of the recording.
                 for p_dev in range( num_play_devs ):
                     for d_i in range( num_divisions ):
-                        stats = measure_stats2( bufs[p_dev], freq, 
+                        stats = measure_stats3( bufs[p_dev], freq, 
                                                 divisions[d_i] )
                         reading[user_i][state][r_dev][p_dev][d_i] = stats
+
     return reading
 
 if __name__ == "__main__": local_user_study()
