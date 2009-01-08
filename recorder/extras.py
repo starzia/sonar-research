@@ -719,4 +719,14 @@ def process_recordings( data_directory,
 
     return reading
 
+def write_data( arr, stat=1 ):
+    DIR = "/home/steve/svn/sonar/data/local_study/processed/"
+    for rec_dev in [0,1,2,3]:
+        for play_dev in [0,1,2,3]:
+            f = open( "%s/%d_%d.%d.txt" % (DIR,rec_dev,play_dev,stat), "w" )
+            s = array2string( arr[:,:,rec_dev,play_dev,1,stat] )
+            f.write("%s\n"%s)
+            f.close()
+
+
 if __name__ == "__main__": local_user_study()
