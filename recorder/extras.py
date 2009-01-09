@@ -555,6 +555,7 @@ def measure_stats2( audio_buffer, freq, NUM_SAMPLES=10 ):
     intensities = log10( array( intensities ) )
     return [ intensities.mean(), intensities.var() ]
 
+# This is actually Bartlett's method with NUM_SAMPLES windows.
 def measure_stats3( audio_buffer, freq, num_divisions, NUM_SAMPLES=10 ):
     """Divides the buffer into the specified number of divisions.
     Each division is further divided into NUM_SAMPLES pieces.  The frequency's
@@ -719,6 +720,7 @@ def process_recordings( data_directory,
 
     return reading
 
+# for the paper data used divisions=50, out3.dat has divisions=[5,50,500]
 def write_data( arr, stat=1 ):
     DIR = "/home/steve/svn/sonar/data/local_study/processed/"
     for rec_dev in [0,1,2,3]:
