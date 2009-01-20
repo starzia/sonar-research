@@ -539,7 +539,12 @@ def freq_energy2( audio_buffer, freq_of_interest ):
     [F,Y] = energy_spectrum( audio_buffer, FFT_POINTS )
     return Y[ freq_index(freq_of_interest) ]
 
-def measure_stats2( audio_buffer, freq, NUM_SAMPLES=10 ):
+def bartlett( audio_buffer, freq, NUM_SAMPLES=10 ):
+    """ The first returned is Bartlett's method result w/ NUM_SAMPLES windows.
+    It estimates the energy of a given frequency in the audio buffer.
+    The second returned value is what we actually used in the USENIX09 paper,
+    which is the variance among those windows.
+    """
     DUTY = 1 # duty cycle for audio analysis
     polling_interval = audio_length( audio_buffer ) / NUM_SAMPLES
     
@@ -555,12 +560,12 @@ def measure_stats2( audio_buffer, freq, NUM_SAMPLES=10 ):
     intensities = log10( array( intensities ) )
     return [ intensities.mean(), intensities.var() ]
 
-# This is actually Bartlett's method with NUM_SAMPLES windows.
-def measure_stats3( audio_buffer, freq, num_divisions, NUM_SAMPLES=10 ):
+def process_recording( audio_buffer, freq, num_divisions, NUM_SAMPLES=10 ):
     """Divides the buffer into the specified number of divisions.
-    Each division is further divided into NUM_SAMPLES pieces.  The frequency's
-    energy is calculated in each piece and then the variance and mean is
-    calculated within each division.
+    Each division is further divided into NUM_SAMPLES pieces when Bartlett's
+    method is called.
+    The frequency's energy is calculated in each piece and then the variance
+    and mean is calculated within each division.
     We return the average of the means and variances across all divisions and
     also the minimum and maximum variances among all divisions."""
     stats = empty( (num_divisions, 2) )
@@ -569,7 +574,7 @@ def measure_stats3( audio_buffer, freq, num_divisions, NUM_SAMPLES=10 ):
     for i in range(num_divisions):
         window_buf = audio_window( audio_buffer, window_size,
                                    i*window_size )
-        stats[i] = measure_stats2( window_buf, freq, NUM_SAMPLES )
+        stats[i] = bartlett( window_buf, freq, NUM_SAMPLES )
     # return [mean-mean, mean-var, max-var, min-var]
     return [ stats[:,0].mean(), stats[:,1].mean(), 
              stats[:,1].max(), stats[:,1].min() ]
@@ -666,8 +671,8 @@ def local_user_study( ping_freq=20000, data_filename="trials.dat",
     f.write( "%03d %s %s %s\n" % (id,start_time_str,task_order,play_dev_order) )
     f.close()
 
-def process_recordings( data_directory,
-                        play_time=60.0, divisions=[60], freq=20000 ):
+def process_all_recordings( data_directory,
+                            play_time=60.0, divisions=[60], freq=20000 ):
     """processes the recordings, returning a 5d array 
         reading[user_id][state][rec_dev][play_dev][num_divisions][mean/var]
     divisions is a list with the number of partitions to split each recording
@@ -714,8 +719,8 @@ def process_recordings( data_directory,
                 # process each segment of the recording.
                 for p_dev in range( num_play_devs ):
                     for d_i in range( num_divisions ):
-                        stats = measure_stats3( bufs[p_dev], freq, 
-                                                divisions[d_i] )
+                        stats = process_recording( bufs[p_dev], freq, 
+                                                   divisions[d_i] )
                         reading[user_i][state][r_dev][p_dev][d_i] = stats
 
     return reading
