@@ -567,7 +567,10 @@ def process_recording( audio_buffer, freq, num_divisions, NUM_SAMPLES=10 ):
     The frequency's energy is calculated in each piece and then the variance
     and mean is calculated within each division.
     We return the average of the means and variances across all divisions and
-    also the minimum and maximum variances among all divisions."""
+    also the minimum and maximum variances among all divisions.
+    The second return value is what was reported in the USENIX09 submittion
+    results, however, what we described in the Analysis section was actuall
+    the last return value."""
     stats = empty( (num_divisions, 2) )
 
     window_size = audio_length( audio_buffer ) / num_divisions
@@ -575,9 +578,10 @@ def process_recording( audio_buffer, freq, num_divisions, NUM_SAMPLES=10 ):
         window_buf = audio_window( audio_buffer, window_size,
                                    i*window_size )
         stats[i] = bartlett( window_buf, freq, NUM_SAMPLES )
-    # return [mean-mean, mean-var, max-var, min-var]
+    # return [mean of mean, mean of var, max-var, min-var, var of mean]
     return [ stats[:,0].mean(), stats[:,1].mean(), 
-             stats[:,1].max(), stats[:,1].min() ]
+             stats[:,1].max(), stats[:,1].min(),
+             stats[:,0].var() ]
 
 def randomly_order( my_list ):
     """returns a random permutation of the passed list."""
@@ -696,7 +700,7 @@ def process_all_recordings( data_directory,
     num_users = len( users )
 
     reading = empty( (num_users,num_states,num_rec_devs,
-                      num_play_devs,num_divisions,4) ) # 4 is size of stats
+                      num_play_devs,num_divisions,5) ) # 5 is size of stats
     for user_i in range( num_users ):
         for state in range( num_states ):
             for r_dev in range( num_rec_devs ):
