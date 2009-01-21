@@ -676,7 +676,7 @@ def local_user_study( ping_freq=20000, data_filename="trials.dat",
     f.close()
 
 def process_all_recordings( data_directory,
-                            play_time=60.0, divisions=[60], freq=20000 ):
+                            play_time=60.0, divisions=[50], freq=20000 ):
     """processes the recordings, returning a 5d array 
         reading[user_id][state][rec_dev][play_dev][num_divisions][mean/var]
     divisions is a list with the number of partitions to split each recording
@@ -699,7 +699,7 @@ def process_all_recordings( data_directory,
         p_dev_mapping.append( list( m.group(2,3,4,5) ) )
     num_users = len( users )
 
-    reading = empty( (num_users,num_states,num_rec_devs,
+    reading = zeros( (num_users,num_states,num_rec_devs,
                       num_play_devs,num_divisions,5) ) # 5 is size of stats
     for user_i in range( num_users ):
         for state in range( num_states ):
@@ -707,7 +707,11 @@ def process_all_recordings( data_directory,
                 filename= "%s/%s.%d.%d.wav"%(data_directory,users[user_i],
                                                state,r_dev)
                 print "opening file %s" % filename
-                buf = read_audio( filename, False )
+                try:
+                    buf = read_audio( filename, False )
+                except:
+                    print " error opening file, skipping!"
+                    continue
                 print " audio is %d seconds long" % audio_length( buf )
                 bufs = []
                 for i in range( num_play_devs ): bufs.append("")
@@ -730,12 +734,12 @@ def process_all_recordings( data_directory,
     return reading
 
 # for the paper data used divisions=50, out3.dat has divisions=[5,50,500]
-def write_data( arr, stat=1 ):
-    DIR = "/home/steve/svn/sonar/data/local_study/processed/"
+def write_data( arr, stat=1, div_index=1,
+                DIR = "/home/steve/svn/sonar/data/local_study/processed/" ):
     for rec_dev in [0,1,2,3]:
         for play_dev in [0,1,2,3]:
             f = open( "%s/%d_%d.%d.txt" % (DIR,rec_dev,play_dev,stat), "w" )
-            s = array2string( arr[:,:,rec_dev,play_dev,1,stat] )
+            s = array2string( arr[:,:,rec_dev,play_dev,div_index,stat] )
             f.write("%s\n"%s)
             f.close()
 
