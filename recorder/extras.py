@@ -675,17 +675,22 @@ def local_user_study( ping_freq=20000, data_filename="trials.dat",
     f.write( "%03d %s %s %s\n" % (id,start_time_str,task_order,play_dev_order) )
     f.close()
 
-def process_all_recordings( data_directory,
-                            play_time=60.0, divisions=[50], freq=20000 ):
-    """processes the recordings, returning a 5d array 
-        reading[user_id][state][rec_dev][play_dev][num_divisions][mean/var]
-    divisions is a list with the number of partitions to split each recording
-    into when calculating the variance of intensity."""
-    # constants
-    num_states=5
-    num_play_devs=4
-    num_rec_devs=4
-    num_divisions = len( divisions )
+# constants
+NUM_STATES=5
+NUM_PLAY_DEVS=4
+NUM_REC_DEVS=4
+
+def process_all_recordings( data_directory, 
+                            processing_func, processing_func_args ):
+    """reads the recordings produced by local_user_study(), 
+
+    data_directory is a string indicating where trials.dat and the wav files
+    are stored.
+    processing_func is the function with which to process the audio
+    buffers.
+
+    returns a 4d list of processing_func results:
+        recording[user_id][state][rec_dev][play_dev]"""
 
     # parse trials.dat
     import re
@@ -699,39 +704,69 @@ def process_all_recordings( data_directory,
         p_dev_mapping.append( list( m.group(2,3,4,5) ) )
     num_users = len( users )
 
-    reading = zeros( (num_users,num_states,num_rec_devs,
-                      num_play_devs,num_divisions,5) ) # 5 is size of stats
+    # intialize what will become a 4D recording list
+    recording = [] 
+
+    # read wav files
     for user_i in range( num_users ):
-        for state in range( num_states ):
-            for r_dev in range( num_rec_devs ):
+        recording.append([]) # add a new user column
+        for state in range( NUM_STATES ):
+            recording[user_i].append([]) # add a new state column 
+            for r_dev in range( NUM_REC_DEVS ):
+                recording[user_i][state].append([]) # add a new r_dev column 
                 filename= "%s/%s.%d.%d.wav"%(data_directory,users[user_i],
                                                state,r_dev)
                 print "opening file %s" % filename
                 try:
-                    buf = read_audio( filename, False )
+                    full_buf = read_audio( filename, False )
                 except:
                     print " error opening file, skipping!"
                     continue
-                print " audio is %d seconds long" % audio_length( buf )
-                bufs = []
-                for i in range( num_play_devs ): bufs.append("")
+                print " audio is %d seconds long" % audio_length( full_buf )
+                play_time = audio_length( full_buf ) / NUM_PLAY_DEVS
+
                 # split recording into pieces for each playback device
-                for p_dev_i in range( num_play_devs ):
-                    p_dev = int( p_dev_mapping[user_i][p_dev_i] )
-                    bufs[ p_dev ] = audio_window( buf, play_time, 
-                                                  play_time*p_dev_i )
+                for p_dev_i in range( NUM_PLAY_DEVS ):
+                    recording[user_i][state][r_dev].append([])
+                for p_dev_i in range( NUM_PLAY_DEVS ):
+                    # cut out portion of wav file
+                    buf = audio_window( full_buf, play_time, play_time*p_dev_i)
                     # trim buffer to account for lack of synchrony in play/rec
                     PADDING = 5 # 5 seconds of padding
-                    bufs[ p_dev ] = audio_window( bufs[ p_dev ], 
-                                                  play_time-2*PADDING,PADDING) 
-                # process each segment of the recording.
-                for p_dev in range( num_play_devs ):
-                    for d_i in range( num_divisions ):
-                        stats = process_recording( bufs[p_dev], freq, 
-                                                   divisions[d_i] )
-                        reading[user_i][state][r_dev][p_dev][d_i] = stats
+                    buf = audio_window( buf, play_time-2*PADDING, PADDING) 
 
-    return reading
+                    # now process this buffer with processing_func
+                    results = processing_func( buf, processing_func_args)
+
+                    p_dev = int( p_dev_mapping[user_i][p_dev_i] )
+                    recording[user_i][state][r_dev][ p_dev ] = results
+    return recording
+
+
+def mean_of_var( buf, args=[[50],20000] ):
+    """processes the recordings, returning a 5d array 
+        reading[user_id][state][rec_dev][play_dev][num_divisions][mean/var]
+    args is split into [divisions,frequency]
+    divisions is a list with the number of partitions to split each recording
+    into when calculating the variance of intensity."""
+    divisions = args[0]
+    freq = args[1]
+
+    results = []
+    for div in divisions:
+        results.append( process_recording( buf, freq, div ))
+    return results
+
+
+def usenix09_results():
+    a = process_all_recordings( "/home/steve/svn/sonar/data/local_study",
+                                mean_of_var, [[50],20000] )
+    return array( a )
+
+
+def correlation():
+    """correlation between first and second half of recordings"""
+
 
 # for the paper data used divisions=50, out3.dat has divisions=[5,50,500]
 def write_data( arr, stat=1, div_index=1,
