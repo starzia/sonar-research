@@ -744,8 +744,8 @@ def process_all_recordings( data_directory,
 
 
 def mean_of_var( buf, args=[[50],20000] ):
-    """processes the recordings, returning a 5d array 
-        reading[user_id][state][rec_dev][play_dev][num_divisions][mean/var]
+    """processes the recording a list of statistics:
+        results[num_divisions][mean/var]
     args is split into [divisions,frequency]
     divisions is a list with the number of partitions to split each recording
     into when calculating the variance of intensity."""
@@ -764,8 +764,48 @@ def usenix09_results():
     return array( a )
 
 
-def correlation():
-    """correlation between first and second half of recordings"""
+def correlation_helper( buf, args=[20000]):
+    """records value for first and second halves"""
+    freq = args[0]
+
+    # break into two halves
+    half_time = audio_length( buf ) / 2
+    divisions = int( round( half_time ) )
+    first_half = audio_window( buf, half_time, 0 )
+    second_half = audio_window( buf, half_time, half_time )
+
+    r1 = process_recording( first_half, freq, divisions )[1] # [1]=mean_of_var
+    r2 = process_recording( second_half, freq, divisions )[1]
+    return [r1,r2];
+
+
+def correlation(directory="/home/steve/svn/sonar/data/local_study"):
+    """correlation (among users) between first and second half of recordings.
+    Specifically, we are calculating the 
+    'Pearson product-moment correlation coefficient' aka 'sample corr. coef.'
+    """
+    a = array( process_all_recordings(directory,
+                                      correlation_helper, [20000] ) )
+    corr = zeros( (NUM_STATES, NUM_REC_DEVS, NUM_PLAY_DEVS) )
+    num_users = a.shape[0]
+    for state in range( NUM_STATES ):
+        for rec_dev in range( NUM_REC_DEVS ):
+            for play_dev in range( NUM_PLAY_DEVS ):
+                # calculate correlation among first and second half of 
+                # recordings for all users in this configuration
+                #  x = first half, y = second half
+                mean_x = a[:,state,rec_dev,play_dev,0].mean()
+                mean_y = a[:,state,rec_dev,play_dev,1].mean()
+                stddev_x = a[:,state,rec_dev,play_dev,0].std()
+                stddev_y = a[:,state,rec_dev,play_dev,1].std()
+                product = 0
+                for user in range( num_users ):
+                    x_i = a[user,state,rec_dev,play_dev,0]
+                    y_i = a[user,state,rec_dev,play_dev,1]                    
+                    product += (x_i - mean_x)*(y_i - mean_y)
+                quotient =  product / (float(num_users-1)*stddev_x*stddev_y)
+                corr[state,rec_dev,play_dev] = quotient
+    return [a,corr]
 
 
 # for the paper data used divisions=50, out3.dat has divisions=[5,50,500]
