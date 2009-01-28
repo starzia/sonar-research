@@ -783,6 +783,7 @@ def correlation(directory="/home/steve/svn/sonar/data/local_study"):
     """correlation (among users) between first and second half of recordings.
     Specifically, we are calculating the 
     'Pearson product-moment correlation coefficient' aka 'sample corr. coef.'
+    http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
     """
     a = array( process_all_recordings(directory,
                                       correlation_helper, [20000] ) )
@@ -798,13 +799,16 @@ def correlation(directory="/home/steve/svn/sonar/data/local_study"):
                 mean_y = a[:,state,rec_dev,play_dev,1].mean()
                 stddev_x = a[:,state,rec_dev,play_dev,0].std()
                 stddev_y = a[:,state,rec_dev,play_dev,1].std()
-                product = 0
+                sum = 0
                 for user in range( num_users ):
                     x_i = a[user,state,rec_dev,play_dev,0]
                     y_i = a[user,state,rec_dev,play_dev,1]                    
-                    product += (x_i - mean_x)*(y_i - mean_y)
-                quotient =  product / (float(num_users-1)*stddev_x*stddev_y)
-                corr[state,rec_dev,play_dev] = quotient
+                    score_x = ( x_i - mean_x ) / stddev_x
+                    score_y = ( y_i - mean_y ) / stddev_y
+                    sum += score_x * score_y
+                corr[state,rec_dev,play_dev] = sum / float( num_users )
+                # NOTE, above, it may be better to use num_users-1 and also
+                # recalculate std_dev using n-1 rather than n in denominator
     return [a,corr]
 
 
