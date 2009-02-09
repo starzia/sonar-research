@@ -675,6 +675,7 @@ def local_user_study( ping_freq=20000, data_filename="trials.dat",
     f.write( "%03d %s %s %s\n" % (id,start_time_str,task_order,play_dev_order) )
     f.close()
 
+
 # constants
 NUM_STATES=5
 NUM_PLAY_DEVS=4
@@ -764,6 +765,18 @@ def usenix09_results():
     return array( a )
 
 
+# for the paper data used divisions=50, out3.dat has divisions=[5,50,500]
+def write_data( arr, stat=1, div_index=1,
+                DIR = "/home/steve/svn/sonar/data/local_study/processed/" ):
+    """This is useful only for the array returned by usernix2009_results"""
+    for rec_dev in [0,1,2,3]:
+        for play_dev in [0,1,2,3]:
+            f = open( "%s/%d_%d.%d.txt" % (DIR,rec_dev,play_dev,stat), "w" )
+            s = array2string( arr[:,:,rec_dev,play_dev,div_index,stat] )
+            f.write("%s\n"%s)
+            f.close()
+
+
 def correlation_helper( buf, args=[20000]):
     """records value for first and second halves"""
     freq = args[0]
@@ -812,15 +825,38 @@ def correlation(directory="/home/steve/svn/sonar/data/local_study"):
     return [a,corr]
 
 
-# for the paper data used divisions=50, out3.dat has divisions=[5,50,500]
-def write_data( arr, stat=1, div_index=1,
-                DIR = "/home/steve/svn/sonar/data/local_study/processed/" ):
-    for rec_dev in [0,1,2,3]:
-        for play_dev in [0,1,2,3]:
-            f = open( "%s/%d_%d.%d.txt" % (DIR,rec_dev,play_dev,stat), "w" )
-            s = array2string( arr[:,:,rec_dev,play_dev,div_index,stat] )
-            f.write("%s\n"%s)
-            f.close()
+def small_scale_var( buf, args=[50,10,20000] ):
+    divisions = args[0]
+    subdivisions = args[1]
+    freq = args[2]
+
+    window_length = audio_length(buf) / divisions
+    energies = []
+    for i in range( divisions ):
+        buf_window  = audio_window( buf, window_length, i * window_length ) 
+        # calculate the energies in each subwindow using bartlett's method
+        energies.append( bartlett( buf_window,freq,subdivisions )[0] )
+    return energies
+
+def plot_small_scale_var( arr, readings_per_second=10 ):
+    """arr must be an array of arr[user,state,readings]"""
+    import pylab    
+    num_readings = arr.shape[2]
+    num_users = arr.shape[0]
+    num_states = arr.shape[1]
+    
+    for i in range( num_states ):
+        #pylab.subplot(111, aspect=0.7) # change aspect ratio
+        for u in range( num_users ):
+            baseline = num_states*u*ones(num_readings)
+            timeline = range(num_readings)/(1.0*readings_per_second*ones(num_readings))
+            pylab.plot( timeline, baseline + arr[u,i,:], 'k' )
+        pylab.xlabel( 'time (seconds)' )
+        pylab.ylabel( 'power at 20kHz (offset for each user)' )
+        pylab.title( "%s state"% ((['typing','video','phone','puzzle','absent'])[i]))
+        filename = "var_fig_%01d.png"%i
+        pylab.savefig( filename, dpi=300 ) # second parm is DPI
+        pylab.close()
 
 
 if __name__ == "__main__": local_user_study()
