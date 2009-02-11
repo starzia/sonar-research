@@ -59,7 +59,8 @@ def svm_light_format( training_data, in_file ):
     f.close()
     
 
-def svm( training_data, test_data, model_file="/tmp/svm.model", log_file="/tmp/svm.log", in_file="/tmp/svm.in" ):
+def svm( training_data, test_data,
+         model_file="/tmp/svm.model", in_file="/tmp/svm.in" ):
     """data[ pos/neg, sample_index, data ]
     returns the accuracy """
     from subprocess import Popen,PIPE
@@ -94,13 +95,13 @@ def svm( training_data, test_data, model_file="/tmp/svm.model", log_file="/tmp/s
         accuracy = float( match.group(1) ) / 100.0
         # below, divide by 2 b/c we have an equal number of negative examples
     else:
-        accuracy = -1 # store nonsense value if svm failed
+        accuracy = -0.000001 # store nonsense value if svm failed
     print "classification success for model on new data was %d percent" % (100.0*accuracy)
-    return result
+    return accuracy
 
 
 def classification_param_study( data ):
-    """data[user,state,sample] is a numpy array"""
+    """data[user,state,time-series-data] is a numpy array"""
     from numpy.fft import fft
     
     # DEFINE PARAMETERS :
@@ -109,7 +110,7 @@ def classification_param_study( data ):
     # we will run clasification for each user plus for a combination of all:
     users = range( data.shape[0] )
     users.append( "all-users" )
-    # we break each user's 50 seconds of samples into this many:
+    # we break the time-series data into this many samples (windows):
     samples = [10,100]
     # the data is modified by these mathematical operations:
     scalers = ["none","log","exp","square","sqrt"]
@@ -132,7 +133,7 @@ def classification_param_study( data ):
     # EVALUATION :
     ##############
     # For each of the combinations of parameters we will generate a list of
-    # classification vectors
+    # classification vectors (samples)
     for i in range( accuracy.size ):
         [u,s_a,s_b,dm,spl,scl,m] = get_indices( accuracy, i )
 
@@ -170,7 +171,7 @@ def classification_param_study( data ):
             divided_data = divided_data.swapaxes( 0,1 )
             # dims are: divided_data[ pos/neg, sample#, data ]
 
-        # apply the scaler:
+        # apply the data scaler:
         if( scalers[scl] == "log" ):
             scaled_data = log( scaled_data )
         elif( scalers[scl] == "exp" ):
@@ -180,7 +181,7 @@ def classification_param_study( data ):
         elif( scalers[scl] == "sqrt" ):
             scaled_data = scaled_data**0.5
 
-        # if we are looking in frequency domain, apply fft:
+        # apply the domain transform
         if( domains[dm] == "freq" ):
             divided_data = fft( divided_data )
 
@@ -214,6 +215,22 @@ def classification_param_study( data ):
                            get_indices( all_user_acc, all_user_acc.argmax() ) )
     print "maximum per-user-model accuracy of %f at %s"%( per_user_acc.max(),
                            get_indices( per_user_acc, per_user_acc.argmax() ) )
+    print
+    # print state-matrix best results
+    for i in [0,1]:
+        inter_state_accuracy = zeros( [len(states_a),len(states_b)] )
+        for s_a in range(len(states_a)):
+            for s_b in range(len(states_b)):
+                if i:
+                    inter_state_accuracy[s_a,s_b] = per_user_acc[s_a,s_b].max()
+                else:
+                    inter_state_accuracy[s_a,s_b] = all_user_acc[s_a,s_b].max()
+        if i:
+            print "per-user-model best inter-state classification accuracy:"
+        else:
+            print "single-model best inter-state classification accuracy:"
+        print inter_state_accuracy
+        print
     return accuracy
 
 
