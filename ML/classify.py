@@ -79,7 +79,7 @@ def svm( training_data, test_data, model_file="/tmp/svm.model", log_file="/tmp/s
         # below, divide by 2 b/c we have an equal number of negative examples
         result = 1 - ( misclassified / ( 2.0*training_data.shape[1] ) )
     else:
-        return -1 # store nonsense value if svm failed
+        return -0.000001 # store nonsense value if svm failed
     print "classification success for training was %d percent" % (100.0*result)
 
     # test classification model
@@ -111,7 +111,8 @@ def classification_param_study( data ):
     # we break each user's 50 seconds of samples into this many:
     samples = [10,100]
     # the data is modified by these mathematical operations:
-    scalers = ["none","log","exp","square","sqrt"]
+    ##scalers = ["none","log","exp","square","sqrt"]
+    scalers = ["none"]
     # we look at both the time-domain sample sequence and a freq-domain rep.:
     domains = ["time", "freq"]
     # we will be comparing each pair of states, because the classification
@@ -144,19 +145,26 @@ def classification_param_study( data ):
                             # dimensions are: scaled_data[ pos/neg, user, data]
 
                             # break the data into the given number of samples:
-                            divided_data = array( array_split( scaled_data, sample, axis=2 ) )
+                            divided_data = array( array_split( scaled_data,
+                                                             sample, axis=2 ) )
                             # dims are divided_data[sample#,pos/neg,user,data]
+                            # swap axes to put sample# before user so that when
+                            # we cut off the first fraction for training this
+                            # will represent the first samples from all users
+                            # rather than all the data from the first users.
                             divided_data = divided_data.swapaxes( 0,1 )
                             # dims are divided_data[pos/neg,sample#,user,data]
                             shape = divided_data.shape
-                            divided_data.reshape( 2, sample*shape[2], shape[3])
+                            divided_data = divided_data.reshape( 2,
+                                                     sample*shape[2], shape[3])
                             # dims are: divided_data[ pos/neg, sample#, data ]
                         else:
                             scaled_data = array( [ data[u,s_a], data[u,s_b] ] )
                             # dimensions are: scaled_data[ pos/neg, data ]
 
                             # break the data into the given number of samples:
-                            divided_data = array( array_split( scaled_data, sample, axis=1 ) )
+                            divided_data = array( array_split( scaled_data,
+                                                             sample, axis=1 ) )
                             divided_data = divided_data.swapaxes( 0,1 )
                             # dims are: divided_data[ pos/neg, sample#, data ]
 
@@ -195,12 +203,22 @@ def classification_param_study( data ):
     #  set.
     # b) a single model is trained using the first part of all users' data
     num_users = len(users) - 1
-    all_user_acc = accuracy[len(users)]
+    all_user_acc = accuracy[num_users]
     per_user_acc = accuracy[0:num_users-1].mean(axis=0) # avg accross users
-    print "maximum single-model accuracy of %f at %d"%( all_user_acc.max(),
-                                                        all_user_acc.argmax() )
-    print "maximum per-user-model accuracy of %f at %d"%( all_user_acc.max(),
-                                                        all_user_acc.argmax() )
+    print "maximum single-model accuracy of %f at %s"%( all_user_acc.max(),
+                           get_indices( all_user_acc, all_user_acc.argmax() ) )
+    print "maximum per-user-model accuracy of %f at %s"%( per_user_acc.max(),
+                           get_indices( per_user_acc, per_user_acc.argmax() ) )
+    return accuracy
+
+
+def get_indices( arr, i ):
+    """get indices of the ith element in array arr"""
+    indices = []
+    for s in arr.shape:
+        indices.append( i / s )
+        i = i % s
+    return indices
 
 
 if __name__ == "__main__":
