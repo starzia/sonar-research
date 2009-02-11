@@ -103,7 +103,8 @@ def classification_param_study( data ):
     """data[user,state,sample] is a numpy array"""
     from numpy.fft import fft
     
-    #PARAMETERS :
+    # DEFINE PARAMETERS :
+    #####################
     training_frac = 0.2 # fraction of data to use as training
     # we will run clasification for each user plus for a combination of all:
     users = range( data.shape[0] )
@@ -111,8 +112,7 @@ def classification_param_study( data ):
     # we break each user's 50 seconds of samples into this many:
     samples = [10,100]
     # the data is modified by these mathematical operations:
-    ##scalers = ["none","log","exp","square","sqrt"]
-    scalers = ["none"]
+    scalers = ["none","log","exp","square","sqrt"]
     # we look at both the time-domain sample sequence and a freq-domain rep.:
     domains = ["time", "freq"]
     # we will be comparing each pair of states, because the classification
@@ -125,78 +125,82 @@ def classification_param_study( data ):
 
     # our figure of merit if the accuracy of the derived clasifier, which will
     # be recorded for each of the combinations of the above parameters:
-    accuracy = zeros( [ len(users), len(samples), len(scalers),
-                        len(domains), len(states_a), len(states_b),
+    accuracy = zeros( [ len(users), len(states_a), len(states_b),
+                        len(domains), len(samples), len(scalers),
                         len(methods) ] )
 
+    # EVALUATION :
+    ##############
     # For each of the combinations of parameters we will generate a list of
     # classification vectors
-    for u,user in enumerate(users):
-        for s_a,state_a in enumerate(states_a):
-            # we only compare state a to state numbers higher than it
-            # to eliminate redundancy:
-            for s_b in range( s_a+1, len(states_b) ):
-                for j,scaler in enumerate(scalers):
-                    for m,sample in enumerate(samples):
-                        # prepare data
-                        if( user == "all-users" ):
-                            # concatenate data from all users
-                            scaled_data = array( [ data[:,s_a], data[:,s_b] ] )
-                            # dimensions are: scaled_data[ pos/neg, user, data]
+    for i in range( accuracy.size ):
+        [u,s_a,s_b,dm,spl,scl,m] = get_indices( accuracy, i )
 
-                            # break the data into the given number of samples:
-                            divided_data = array( array_split( scaled_data,
-                                                             sample, axis=2 ) )
-                            # dims are divided_data[sample#,pos/neg,user,data]
-                            # swap axes to put sample# before user so that when
-                            # we cut off the first fraction for training this
-                            # will represent the first samples from all users
-                            # rather than all the data from the first users.
-                            divided_data = divided_data.swapaxes( 0,1 )
-                            # dims are divided_data[pos/neg,sample#,user,data]
-                            shape = divided_data.shape
-                            divided_data = divided_data.reshape( 2,
-                                                     sample*shape[2], shape[3])
-                            # dims are: divided_data[ pos/neg, sample#, data ]
-                        else:
-                            scaled_data = array( [ data[u,s_a], data[u,s_b] ] )
-                            # dimensions are: scaled_data[ pos/neg, data ]
+        # we only compare state a to state b numbers higher than it
+        # to eliminate redundancy:
+        if s_b <= s_a: continue
 
-                            # break the data into the given number of samples:
-                            divided_data = array( array_split( scaled_data,
-                                                             sample, axis=1 ) )
-                            divided_data = divided_data.swapaxes( 0,1 )
-                            # dims are: divided_data[ pos/neg, sample#, data ]
+        # break the data into samples
+        if( users[u] == "all-users" ):
+            # concatenate data from all users
+            scaled_data = array( [ data[:,s_a], data[:,s_b] ] )
+            # dimensions are: scaled_data[ pos/neg, user, data]
 
-                        # apply the scaler:
-                        if( scaler == "log" ):
-                            scaled_data = log( scaled_data )
-                        elif( scaler == "exp" ):
-                            scaled_data = exp( scaled_data )
-                        elif( scaler == "square" ):
-                            scaled_data = scaled_data**2
-                        elif( scaler == "sqrt" ):
-                            scaled_data = scaled_data**0.5
+            # break the data into the given number of samples:
+            divided_data = array( array_split( scaled_data, samples[spl],
+                                               axis=2 ) )
+            # dims are divided_data[sample#,pos/neg,user,data]
+            # swap axes to put sample# before user so that when
+            # we cut off the first fraction for training this
+            # will represent the first samples from all users
+            # rather than all the data from the first users.
+            divided_data = divided_data.swapaxes( 0,1 )
+            # dims are divided_data[pos/neg,sample#,user,data]
+            shape = divided_data.shape
+            divided_data = divided_data.reshape( 2, samples[spl]*shape[2],
+                                                 shape[3])
+            # dims are: divided_data[ pos/neg, sample#, data ]
+        else:
+            scaled_data = array( [ data[u,s_a], data[u,s_b] ] )
+            # dimensions are: scaled_data[ pos/neg, data ]
+            
+            # break the data into the given number of samples:
+            divided_data = array( array_split( scaled_data, samples[spl],
+                                               axis=1 ) )
+            divided_data = divided_data.swapaxes( 0,1 )
+            # dims are: divided_data[ pos/neg, sample#, data ]
 
-                        for k,domain in enumerate(domains):
-                            # if we are looking in frequency domain, apply fft:
-                            if( domain == "freq" ):
-                                divided_data = fft( divided_data )
-                                
-                            for l,method in enumerate(methods):
-                                # break into training and test fractions:
-                                split_index = ceil( training_frac * sample )
-                                [training_data,test_data] = array_split(
-                                    divided_data, [split_index], axis=1 )
-                                
-                                print "user=%s states=(%s,%s) scaler=%s samples=%03d\n domain=%s method=%s" % (user,state_a,states_b[s_b],scaler,sample,domain,method) 
-                                if( method == "svm" ):
-                                    acc = svm( training_data, test_data )
-                                elif( method == "neural net" ):
-                                    #acc = weka( divided_data )
-                                    acc = 0.3
-                                accuracy[u,m,j,k,s_a,s_b,l] = acc
-                                print
+        # apply the scaler:
+        if( scalers[scl] == "log" ):
+            scaled_data = log( scaled_data )
+        elif( scalers[scl] == "exp" ):
+            scaled_data = exp( scaled_data )
+        elif( scalers[scl] == "square" ):
+            scaled_data = scaled_data**2
+        elif( scalers[scl] == "sqrt" ):
+            scaled_data = scaled_data**0.5
+
+        # if we are looking in frequency domain, apply fft:
+        if( domains[dm] == "freq" ):
+            divided_data = fft( divided_data )
+
+        # break into training and test fractions:
+        split_index = ceil( training_frac * samples[spl] )
+        [training_data,test_data] = array_split( divided_data, [split_index],
+                                                 axis=1 )
+
+        # now run ML algorithm
+        print "user=%s states=(%s,%s) scaler=%s samples=%03d\n domain=%s method=%s" % (users[u],states_a[s_a],states_b[s_b],scalers[scl],samples[spl],domains[dm],methods[m]) 
+        if( methods[m] == "svm" ):
+            acc = svm( training_data, test_data )
+        elif( methods[m] == "neural net" ):
+            #acc = weka( divided_data )
+            acc = -0.0000003
+        accuracy[u,s_a,s_b,dm,spl,scl,m] = acc
+        print
+
+    # ANALYZE RESULTS:
+    ##################
     # We consider two cases:
     # a) a model is trained for each user, using the first part of their data
     #  In this case, we average the accuracy accross all users for each param
@@ -205,6 +209,7 @@ def classification_param_study( data ):
     num_users = len(users) - 1
     all_user_acc = accuracy[num_users]
     per_user_acc = accuracy[0:num_users-1].mean(axis=0) # avg accross users
+    print all_user_acc.shape
     print "maximum single-model accuracy of %f at %s"%( all_user_acc.max(),
                            get_indices( all_user_acc, all_user_acc.argmax() ) )
     print "maximum per-user-model accuracy of %f at %s"%( per_user_acc.max(),
@@ -213,11 +218,13 @@ def classification_param_study( data ):
 
 
 def get_indices( arr, i ):
-    """get indices of the ith element in array arr"""
+    """get indices of the ith element in high-dimensional array arr"""
     indices = []
+    slice_size = arr.size
     for s in arr.shape:
-        indices.append( i / s )
-        i = i % s
+        slice_size /= s
+        indices.append( i / slice_size )
+        i %= slice_size
     return indices
 
 
