@@ -48,13 +48,11 @@ def svm( data, model_file="/tmp/svm.model", log_file="/tmp/svm.log", in_file="/t
             f.write( "%s " % str )
             for k in range( sample.size ):
                 f.write( "%d:%f " % (k+1, sample[k]) )
+            # add statistics to end of vector
+            stats = classification_stats( sample )
+            for k,val in enumerate( stats ):
+                f.write( "%d:%f " % (sample.size+k+1, val) )
             f.write("\n")
-        # add statistics vector
-        stats = classification_stats( data[i] )
-        f.write( "%s " % str )
-        for k,val in enumerate( stats ):
-            f.write( "%d:%f " % (data[i][0].size+k+1, val) )
-        f.write("\n")
     f.close()
 
     # run tool
@@ -65,7 +63,7 @@ def svm( data, model_file="/tmp/svm.model", log_file="/tmp/svm.log", in_file="/t
     match = re.search( "\((.*) misclassified,", output )
     misclassified = float( match.group(1) )
     result = misclassified / ( 2.0 * data.shape[1] )
-    print "classification success was %f percent\n" % (100.0*result)
+    print "classification success was %f percent" % (100.0*result)
     return result
 
 
@@ -76,19 +74,21 @@ def classification_param_study( data ):
     #PARAMETERS :
     # we will run clasification for each user plus for a combination of all:
     users = range( data.shape[0] )
-    users.append("all-users")
+    users.append( "all-users" )
     # we break each user's 50 seconds of samples into this many:
     samples = [1,10,100]
     # the data is modified by these mathematical operations:
-    scalers = ["none","log","exp","square","sqrt"]
+    ###scalers = ["none","log","exp","square","sqrt"]
+    scalers = ["none"]
     # we look at both the time-domain sample sequence and a freq-domain rep.:
-    domains = ["time", "frequency"]
+    domains = ["time", "freq"]
     # we will be comparing each pair of states, because the classification
     # problem is binary:
     states_a = ["typing","video","phone","puzzle","absent"]
     states_b = ["typing","video","phone","puzzle","absent"]
     # several Machine Learning approaches are tried:
-    methods = ["svm","neural net"]
+    ##methods = ["svm","neural net"]
+    methods = ["svm"]
 
     # our figure of merit if the accuracy of the derived clasifier, which will
     # be recorded for each of the combinations of the above parameters:
@@ -104,10 +104,17 @@ def classification_param_study( data ):
             # to eliminate redundancy:
             for s_b in range( s_a+1, len(states_b) ):
                 for j,scaler in enumerate(scalers):
+                    # copy data
+                    if( user == "all_users" ):
+                        # concatenate data from all users
+                        scaled_data = empty( [ 2, data.shape[2]*data.shape[0]])
+                        scaled_data[0] = data[:,s_a].flatten()
+                        scaled_data[1] = data[:,s_b].flatten()
+                    else:
+                        scaled_data = empty( [ 2, data.shape[2] ] )
+                        scaled_data[0] = data[u,s_a]
+                        scaled_data[1] = data[u,s_b]
                     # apply the scaler:
-                    scaled_data = empty( [ 2, data.shape[2] ] )
-                    scaled_data[0] = data[u,s_a]
-                    scaled_data[1] = data[u,s_b]
                     if( scaler == "log" ):
                         scaled_data = log( scaled_data )
                     elif( scaler == "exp" ):
@@ -123,24 +130,26 @@ def classification_param_study( data ):
                         divided_data = divided_data.swapaxes( 0,1 )
                         for k,domain in enumerate(domains):
                             # if we are looking in frequency domain, apply fft:
-                            if( domain == "frequency" ):
+                            if( domain == "freq" ):
                                 divided_data = fft( divided_data )
                                 
                             for l,method in enumerate(methods):
+                                print "user=%s states=(%s,%s) scaler=%s samples=%03d\n domain=%s method=%s" % (user,state_a,states_b[s_b],scaler,sample,domain,method) 
                                 if( method == "svm" ):
                                     acc = svm( divided_data )
                                 elif( method == "neural net" ):
                                     #acc = weka( divided_data )
                                     acc = 0.3
                                 accuracy[u,m,j,k,s_a,s_b,l] = acc
+                                print
     return accuracy
 
 
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print "usage is:\n  %s [pickled_data_array_filename]\n"%argv[0]
-        exit(-1)
+        print "usage is:\n  %s [pickled_data_array_filename]\n"%sys.argv[0]
+        sys.exit(-1)
     else:
         arr = load( sys.argv[1] )
         ret = classification_param_study( arr )
