@@ -16,6 +16,14 @@ def read_txt_file( filename ):
     return elements
 
 
+def zero_crossings( arr ):
+    """return the number of zero crossings in the numpy array."""
+    signs = ( arr >= 0 )
+    # compare array of signs that are offset by one index
+    crossings = signs[1:] - signs[0:signs.shape[0]-1]
+    return absolute( crossings ).sum()
+    
+
 def classification_stats( elements ):
     """calculates some statistical properties of the
     passed element list.  This operation
@@ -31,6 +39,8 @@ def classification_stats( elements ):
     stats.append( arr.max() )
     stats.append( arr.argmin() )
     stats.append( arr.argmax() )
+    # append the number of mean-value crossings
+    stats.append( zero_crossings( arr - arr.mean() ) )
     return stats
 
 
@@ -52,6 +62,7 @@ def svm_light_format( training_data, in_file ):
             for k in range( sample.size ):
                 f.write( "%d:%f " % (k+1, sample[k]) )
             # add statistics to end of vector
+            # I beleive that these are properly called "kernel tricks"
             stats = classification_stats( sample )
             for k,val in enumerate( stats ):
                 f.write( "%d:%f " % (sample.size+k+1, val) )
@@ -106,7 +117,7 @@ def classification_param_study( data ):
     
     # DEFINE PARAMETERS :
     #####################
-    training_frac = 0.2 # fraction of data to use as training
+    training_frac = 0.5 # fraction of data to use as training
     # we will run clasification for each user plus for a combination of all:
     users = range( data.shape[0] )
     users.append( "all-users" )
