@@ -54,6 +54,7 @@ def my_kill( pid ):
 
 
 def svm_light_format( training_data, in_file ):
+    """A helper function that creates the input files for svm_light"""
     f = open( in_file, "w" )
     for i,str in enumerate( ["+1", "-1"] ):
         # writ data sample vectors
@@ -70,10 +71,11 @@ def svm_light_format( training_data, in_file ):
     f.close()
     
 
-def svm( training_data, test_data,
-         model_file="/tmp/svm.model", in_file="/tmp/svm.in" ):
+def svm_train( training_data,
+               model_file="/tmp/svm.model", in_file="/tmp/svm.in" ):
     """data[ pos/neg, sample_index, data ]
-    returns the accuracy """
+    returns success bool.
+    model_file is the primary output and in_file is a debugging output."""
     from subprocess import Popen,PIPE
     import re
     from threading import Timer
@@ -88,15 +90,25 @@ def svm( training_data, test_data,
     match = re.search( "\((.*) misclassified,", output )
     if match:
         misclassified = float( match.group(1) )
-        # below, divide by 2 b/c we have an equal number of negative examples
-        result = 1 - ( misclassified / ( 2.0*training_data.shape[1] ) )
+        result = 1 - ( misclassified / ( training_data[0].size +
+                                         training_data[1].size ) )
     else:
-        return -0.000001 # store nonsense value if svm failed
+        return False
     print "classification success for training was %d percent" % (100.0*result)
+    return True
+
+
+def svm_test( test_data, model_file="/tmp/svm.model", in_file="/tmp/svm.in" ):
+    """data[ pos/neg, sample_index, data ]
+    returns the accuracy.
+    model_file is an input and in_file is a debugging output."""
+    from subprocess import Popen,PIPE
+    import re
+    from threading import Timer
 
     # test classification model
     svm_light_format( test_data, in_file )
-    p = Popen("svm_classify %s %s" %(in_file,model_file),shell=True,stdout=PIPE)
+    p= Popen("svm_classify %s %s" %(in_file,model_file),shell=True,stdout=PIPE)
     # kill the process if no results in 5 seconds
     Timer( 5, my_kill, [p.pid] ).start()
     output = p.communicate()[0]
@@ -112,7 +124,7 @@ def svm( training_data, test_data,
 
 
 def classification_param_study( data ):
-    """data[user,state,time-series-data] is a numpy array"""
+    """data[user,state,time] is a numpy array"""
     from numpy.fft import fft
     
     # DEFINE PARAMETERS :
@@ -127,17 +139,15 @@ def classification_param_study( data ):
     scalers = ["none","log","exp","square","sqrt"]
     # we look at both the time-domain sample sequence and a freq-domain rep.:
     domains = ["time", "freq"]
-    # we will be comparing each pair of states, because the classification
-    # problem is binary:
-    states_a = ["typing","video","phone","puzzle","absent"]
-    states_b = ["typing","video","phone","puzzle","absent"]
+    # we will be comparing each state to all other states
+    states = ["typing","video","phone","puzzle","absent"]
     # several Machine Learning approaches are tried:
     ##methods = ["svm","neural net"]
     methods = ["svm"]
 
     # our figure of merit if the accuracy of the derived clasifier, which will
     # be recorded for each of the combinations of the above parameters:
-    accuracy = zeros( [ len(users), len(states_a), len(states_b),
+    accuracy = zeros( [ len(users), len(states),
                         len(domains), len(samples), len(scalers),
                         len(methods) ] )
 
@@ -146,69 +156,73 @@ def classification_param_study( data ):
     # For each of the combinations of parameters we will generate a list of
     # classification vectors (samples)
     for i in range( accuracy.size ):
-        [u,s_a,s_b,dm,spl,scl,m] = get_indices( accuracy, i )
+        [u,s,dm,spl,scl,m] = get_indices( accuracy, i )
 
-        # we only compare state a to state b numbers higher than it
-        # to eliminate redundancy:
-        if s_b <= s_a: continue
-
-        # break the data into samples
+        #---- break the data into samples
+        # dims are: data[ user, state, time ]
+        # break the data (along time axis) into given number of samples:
+        new_data = array( array_split( data, samples[spl], axis=2 ) )
+        # dims are new_data[sample#,user,state,time]
+        
         if( users[u] == "all-users" ):
-            # concatenate data from all users
-            scaled_data = array( [ data[:,s_a], data[:,s_b] ] )
-            # dimensions are: scaled_data[ pos/neg, user, data]
-
-            # break the data into the given number of samples:
-            divided_data = array( array_split( scaled_data, samples[spl],
-                                               axis=2 ) )
-            # dims are divided_data[sample#,pos/neg,user,data]
-            # swap axes to put sample# before user so that when
-            # we cut off the first fraction for training this
-            # will represent the first samples from all users
-            # rather than all the data from the first users.
-            divided_data = divided_data.swapaxes( 0,1 )
-            # dims are divided_data[pos/neg,sample#,user,data]
-            shape = divided_data.shape
-            divided_data = divided_data.reshape( 2, samples[spl]*shape[2],
-                                                 shape[3])
-            # dims are: divided_data[ pos/neg, sample#, data ]
+            # collapse users axis:
+            shape = new_data.shape
+            new_data = new_data.reshape( shape[0], shape[2], shape[3] )
         else:
-            scaled_data = array( [ data[u,s_a], data[u,s_b] ] )
-            # dimensions are: scaled_data[ pos/neg, data ]
-            
-            # break the data into the given number of samples:
-            divided_data = array( array_split( scaled_data, samples[spl],
-                                               axis=1 ) )
-            divided_data = divided_data.swapaxes( 0,1 )
-            # dims are: divided_data[ pos/neg, sample#, data ]
+            # grab data from one user:
+            new_data = new_data[:,u]
+        # dims are: new_data[ sample#, state, time ]
 
-        # apply the data scaler:
+        #---- apply the data scaler:
         if( scalers[scl] == "log" ):
-            scaled_data = log( scaled_data )
+            new_data = log( new_data )
         elif( scalers[scl] == "exp" ):
-            scaled_data = exp( scaled_data )
+            new_data = exp( new_data )
         elif( scalers[scl] == "square" ):
-            scaled_data = scaled_data**2
+            new_data = new_data**2
         elif( scalers[scl] == "sqrt" ):
-            scaled_data = scaled_data**0.5
+            new_data = new_data**0.5
 
-        # apply the domain transform
+        #---- apply the domain transform
         if( domains[dm] == "freq" ):
-            divided_data = fft( divided_data )
+            new_data = fft( new_data )
 
-        # break into training and test fractions:
+        #---- break into training and test fractions:
         split_index = ceil( training_frac * samples[spl] )
-        [training_data,test_data] = array_split( divided_data, [split_index],
-                                                 axis=1 )
+        [training_data,test_data] = array_split( new_data,[split_index],axis=0)
 
-        # now run ML algorithm
-        print "user=%s states=(%s,%s) scaler=%s samples=%03d\n domain=%s method=%s" % (users[u],states_a[s_a],states_b[s_b],scalers[scl],samples[spl],domains[dm],methods[m]) 
+        #---- label training_data as either positive or negative examples:
+        pos_examples = training_data[:,s]
+        neg_examples = []
+        for i in range( len(states) ):
+            if( i != s ):
+                neg_examples.append( training_data[:,i] )
+        neg_examples = hstack( neg_examples )
+        # dims are: *_examples[ sample#, time ]
+        training_data = [ pos_examples, neg_examples ]
+
+        #---- now run ML algorithm
+        print "user=%s state=%s scaler=%s samples=%03d domain=%s method=%s" % (users[u],states[s],scalers[scl],samples[spl],domains[dm],methods[m]) 
         if( methods[m] == "svm" ):
-            acc = svm( training_data, test_data )
+            if( svm_train( training_data ) ):
+                # for all states other than the one we are currently detecting:
+                for i in range( len( states ) ):
+                    if( i == s ):
+                        test_data2 = [ test_data[:,i], [] ] # all pos
+                        true_pos_accuracy = svm_test( test_data2 )
+                        print " positive test accuracy: %f" % true_pos_accuracy
+                    else:
+                        test_data2 = [ [], test_data[:,i] ] # all neg
+                        true_neg_accuracy = svm_test( test_data2 )
+                        print " negative test %s accuracy: %f" % ( states[i],
+                                                            true_neg_accuracy )
+                acc = 1 # TODO
+            else:
+                acc = -0.00000000008 #nonsense, error code on failure
         elif( methods[m] == "neural net" ):
-            #acc = weka( divided_data )
+            #acc = weka( new_data )
             acc = -0.0000003
-        accuracy[u,s_a,s_b,dm,spl,scl,m] = acc
+        accuracy[u,s,dm,spl,scl,m] = acc
         print
 
     # ANALYZE RESULTS:
