@@ -174,7 +174,7 @@ def classification_param_study( data ):
         if( users[u] == "all-users" ):
             # collapse users axis:
             shape = new_data.shape
-            new_data = new_data.reshape( shape[0], shape[2], shape[3] )
+            new_data = new_data.reshape( (shape[0]*shape[1],shape[2],shape[3]))
         else:
             # grab data from one user:
             new_data = new_data[:,u]
@@ -254,9 +254,10 @@ def classification_param_study( data ):
             inter_state_accuracy[i][s] = PSacc[i][s][argmax]
             print "state %d, best_params=%s" % (s,argmax)
         if i:
-            print "per-user-model best inter-state classification accuracy:"
+            print "per-user-model ",
         else:
-            print "single-model best inter-state classification accuracy:"
+            print "single-model ",
+        print "best inter-state classification accuracy:"
         print inter_state_accuracy[i]
         print
     return accuracy
