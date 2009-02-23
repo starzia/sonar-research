@@ -82,7 +82,11 @@ def svm_train( training_data,
 
     # build classification model
     svm_light_format( training_data, in_file )
-    p = Popen("svm_learn %s %s" %(in_file,model_file), shell=True, stdout=PIPE)
+    # weight positive examples by a factor so that pos and neg accuracy
+    # have the same cumulative weight when training
+    pos_weight = len(training_data[1]) / float(len(training_data[0]))
+    p = Popen("svm_learn -j %f %s %s" % (pos_weight,in_file,model_file),
+              shell=True, stdout=PIPE)
     # kill the process if no results in 5 seconds
     Timer( 5, my_kill, [p.pid] ).start()
     output = p.communicate()[0]
@@ -90,8 +94,8 @@ def svm_train( training_data,
     match = re.search( "\((.*) misclassified,", output )
     if match:
         misclassified = float( match.group(1) )
-        result = 1 - ( misclassified / ( training_data[0].size +
-                                         training_data[1].size ) )
+        result = 1 - ( misclassified / ( len( training_data[0] ) +
+                                         len( training_data[1] )    ) )
     else:
         return False
     print "classification success for training was %d percent" % (100.0*result)
@@ -119,7 +123,7 @@ def svm_test( test_data, model_file="/tmp/svm.model", in_file="/tmp/svm.in" ):
         # below, divide by 2 b/c we have an equal number of negative examples
     else:
         accuracy = -0.000001 # store nonsense value if svm failed
-    print "classification success for model on new data was %d percent" % (100.0*accuracy)
+    #print "classification success for model on new data was %d percent" % (100.0*accuracy)
     return accuracy
 
 
@@ -197,7 +201,7 @@ def classification_param_study( data ):
         for i in range( len(states) ):
             if( i != s ):
                 neg_examples.append( training_data[:,i] )
-        neg_examples = hstack( neg_examples )
+        neg_examples = vstack( neg_examples )
         # dims are: *_examples[ sample#, time ]
         training_data = [ pos_examples, neg_examples ]
 
