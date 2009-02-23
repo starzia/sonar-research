@@ -154,13 +154,16 @@ def classification_param_study( data ):
     accuracy = zeros( [ len(users), len(states),
                         len(domains), len(samples), len(scalers),
                         len(methods) ] )
+    per_state_acc = zeros( [ len(users), len(states),
+                             len(domains), len(samples), len(scalers),
+                             len(methods), len(states) ] )
 
     # EVALUATION :
     ##############
     # For each of the combinations of parameters we will generate a list of
     # classification vectors (samples)
     for i in range( accuracy.size ):
-        [u,s,dm,spl,scl,m] = get_indices( accuracy, i )
+        [u,s,dm,spl,scl,m] = unravel_index( i, accuracy.shape )
 
         #---- break the data into samples
         # dims are: data[ user, state, time ]
@@ -213,14 +216,15 @@ def classification_param_study( data ):
                 for i in range( len( states ) ):
                     if( i == s ):
                         test_data2 = [ test_data[:,i], [] ] # all pos
-                        true_pos_accuracy = svm_test( test_data2 )
-                        print " positive test accuracy: %f" % true_pos_accuracy
+                        print " positive test accuracy: ",
                     else:
                         test_data2 = [ [], test_data[:,i] ] # all neg
-                        true_neg_accuracy = svm_test( test_data2 )
-                        print " negative test %s accuracy: %f" % ( states[i],
-                                                            true_neg_accuracy )
-                acc = 1 # TODO
+                        print " negative test %s accuracy: "%states[i],
+                    state_acc = svm_test( test_data2 )
+                    print state_acc
+                    per_state_acc[u,s,dm,spl,scl,m,i] = state_acc
+                acc = ( per_state_acc[u,s,dm,spl,scl,m,:].sum() +
+                        (len(states)-1)*per_state_acc[u,s,dm,spl,scl,m,s] )
             else:
                 acc = -0.00000000008 #nonsense, error code on failure
         elif( methods[m] == "neural net" ):
@@ -237,41 +241,25 @@ def classification_param_study( data ):
     #  set.
     # b) a single model is trained using the first part of all users' data
     num_users = len(users) - 1
-    all_user_acc = accuracy[num_users]
-    per_user_acc = accuracy[0:num_users-1].mean(axis=0) # avg accross users
-    print all_user_acc.shape
-    print "maximum single-model accuracy of %f at %s"%( all_user_acc.max(),
-                           get_indices( all_user_acc, all_user_acc.argmax() ) )
-    print "maximum per-user-model accuracy of %f at %s"%( per_user_acc.max(),
-                           get_indices( per_user_acc, per_user_acc.argmax() ) )
-    print
+    acc = [ accuracy[num_users],
+            accuracy[0:num_users-1].mean(axis=0) ] # avg accross users
+    PSacc = [ per_state_acc[num_users],
+              per_state_acc[0:num_users-1].mean(axis=0) ] # avg accross users
+
     # print state-matrix best results
+    inter_state_accuracy = zeros( [2,len(states),len(states)] )
     for i in [0,1]:
-        inter_state_accuracy = zeros( [len(states_a),len(states_b)] )
-        for s_a in range(len(states_a)):
-            for s_b in range(len(states_b)):
-                if i:
-                    inter_state_accuracy[s_a,s_b] = per_user_acc[s_a,s_b].max()
-                else:
-                    inter_state_accuracy[s_a,s_b] = all_user_acc[s_a,s_b].max()
+        for s in range(len(states)):
+            argmax = unravel_index( acc[i][s].argmax(), acc[i][s].shape )
+            inter_state_accuracy[i][s] = PSacc[i][s][argmax]
+            print "state %d, best_params=%s" % (s,argmax)
         if i:
             print "per-user-model best inter-state classification accuracy:"
         else:
             print "single-model best inter-state classification accuracy:"
-        print inter_state_accuracy
+        print inter_state_accuracy[i]
         print
     return accuracy
-
-
-def get_indices( arr, i ):
-    """get indices of the ith element in high-dimensional array arr"""
-    indices = []
-    slice_size = arr.size
-    for s in arr.shape:
-        slice_size /= s
-        indices.append( i / slice_size )
-        i %= slice_size
-    return indices
 
 
 if __name__ == "__main__":
