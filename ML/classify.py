@@ -127,31 +127,38 @@ def svm_test( test_data, model_file="/tmp/svm.model", in_file="/tmp/svm.in" ):
     return accuracy
 
 
+# DEFINE PARAMETERS :
+#####################
+training_frac = 0.5 # fraction of data to use as training
+# we will run clasification for each user plus for a combination of all:
+users = range( 20 )
+users.append( "all-users" )
+# we break the time-series data into this many samples (windows):
+samples = [10,100]
+# the data is modified by these mathematical operations:
+scalers = ["none","log","exp","square","sqrt"]
+# we look at both the time-domain sample sequence and a freq-domain rep.:
+domains = ["time", "freq"]
+# we will be comparing each state to all other states
+states = ["typing","video","phone","puzzle","absent"]
+# several Machine Learning approaches are tried:
+##methods = ["svm","neural net"]
+methods = ["svm"]
+
+
 def classification_param_study( data ):
+    """data[user,state,time] is a numpy array"""
+    accuracy = eval_param_study( data )
+    analyze_param_study( accuracy )
+
+
+def eval_param_study( data ):
     """data[user,state,time] is a numpy array"""
     from numpy.fft import fft
     
-    # DEFINE PARAMETERS :
-    #####################
-    training_frac = 0.5 # fraction of data to use as training
-    # we will run clasification for each user plus for a combination of all:
-    users = range( data.shape[0] )
-    users.append( "all-users" )
-    # we break the time-series data into this many samples (windows):
-    samples = [10,100]
-    # the data is modified by these mathematical operations:
-    scalers = ["none","log","exp","square","sqrt"]
-    # we look at both the time-domain sample sequence and a freq-domain rep.:
-    domains = ["time", "freq"]
-    # we will be comparing each state to all other states
-    states = ["typing","video","phone","puzzle","absent"]
-    # several Machine Learning approaches are tried:
-    ##methods = ["svm","neural net"]
-    methods = ["svm"]
-
     # our figure of merit if the accuracy of the derived clasifier, which will
     # be recorded for each of the combinations of the above parameters:
-    accuracy = zeros( [ len(users), len(states),
+    params = zeros( [ len(users), len(states),
                         len(domains), len(samples), len(scalers),
                         len(methods) ] )
     per_state_acc = zeros( [ len(users), len(states),
@@ -162,8 +169,8 @@ def classification_param_study( data ):
     ##############
     # For each of the combinations of parameters we will generate a list of
     # classification vectors (samples)
-    for i in range( accuracy.size ):
-        [u,s,dm,spl,scl,m] = unravel_index( i, accuracy.shape )
+    for i in range( params.size ):
+        [u,s,dm,spl,scl,m] = unravel_index( i, params.shape )
 
         #---- break the data into samples
         # dims are: data[ user, state, time ]
@@ -223,18 +230,25 @@ def classification_param_study( data ):
                     state_acc = svm_test( test_data2 )
                     print state_acc
                     per_state_acc[u,s,dm,spl,scl,m,i] = state_acc
-                acc = ( per_state_acc[u,s,dm,spl,scl,m,:].sum() +
-                        (len(states)-1)*per_state_acc[u,s,dm,spl,scl,m,s] )
             else:
-                acc = -0.00000000008 #nonsense, error code on failure
+                "noop. we get here is training fails."
         elif( methods[m] == "neural net" ):
-            #acc = weka( new_data )
-            acc = -0.0000003
-        accuracy[u,s,dm,spl,scl,m] = acc
+            "noop"
         print
+    return per_state_acc
 
+
+def analyze_param_study( per_state_acc ):
+    """per_state_acc[user,state,domain,#samples,scaler,method,state_tested]"""
     # ANALYZE RESULTS:
     ##################
+    # summarize the accuracies of classifying each state using a weighted
+    # average accross states.
+    accuracy = per_state_acc.sum(axis=6) # sum all tested states
+    # give the positive-state samples equal total weight as negatives:
+    for s in range(len(states)):
+        accuracy[:,s] += (len(states)-1) * per_state_acc[:,s,:,:,:,:,s]
+
     # We consider two cases:
     # a) a model is trained for each user, using the first part of their data
     #  In this case, we average the accuracy accross all users for each param
@@ -257,7 +271,10 @@ def classification_param_study( data ):
             print "per-user-model ",
         else:
             print "single-model ",
-        print "best inter-state classification accuracy:"
+        print "classification results for each state's best classifier:"
+        print " Columns are the actual state."
+        print " Rows show the frequency that the state was classified as state i"
+        print " using state i's best classifier."
         print inter_state_accuracy[i]
         print
     return accuracy
