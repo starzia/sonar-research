@@ -129,7 +129,6 @@ def svm_test( test_data, model_file="/tmp/svm.model", in_file="/tmp/svm.in" ):
 
 # DEFINE PARAMETERS :
 #####################
-training_frac = 0.5 # fraction of data to use as training
 # we will run clasification for each user plus for a combination of all:
 users = range( 20 )
 users.append( "all-users" )
@@ -152,8 +151,13 @@ def classification_param_study( data ):
     analyze_param_study( accuracy )
 
 
-def eval_param_study( data ):
-    """data[user,state,time] is a numpy array"""
+def eval_param_study( data,
+                      training_frac = 0.5, training_slice=0 ):
+    """data[user,state,time] is a numpy array
+    training_frac is fraction of data to use as training
+    training_slice is which slice of size training_frac to use for
+    training.  Eg, 0 means to use the first portion of data, 1 means to use
+    the second, etc."""
     from numpy.fft import fft
     
     # our figure of merit if the accuracy of the derived clasifier, which will
@@ -202,8 +206,18 @@ def eval_param_study( data ):
             new_data = fft( new_data )
 
         #---- break into training and test fractions:
-        split_index = ceil( training_frac * samples[spl] )
-        [training_data,test_data] = array_split( new_data,[split_index],axis=0)
+        # training data may be taken from middle, so we have to split the data
+        # and rejoin the left and right test segments
+        split1_index = ceil( training_frac * training_slice * samples[spl] )
+        split2_index = ceil( training_frac *(training_slice+1) * samples[spl] )
+        [test1_data,training_data,test2_data] = array_split( new_data,
+                                            [split1_index,split2_index],axis=0)
+        if test1_data.size == 0:
+            test_data = test2_data
+        elif test2_data.size == 0:
+            test_data = test1_data
+        else:
+            test_data = vstack( [test1_data,test2_data] )
 
         #---- label training_data as either positive or negative examples:
         pos_examples = training_data[:,s]
