@@ -138,7 +138,6 @@ training_slice=0
 
 # we will run clasification for each user plus for a combination of all:
 users = range( 20 )
-users.append( "all-users" )
 # we will be comparing each state to all other states
 states = ["typing","video","phone","puzzle","absent"]
 # we look at both the time-domain sample sequence and a freq-domain rep.:
@@ -167,24 +166,39 @@ def flatten_users( data ):
 
 def classification_param_study( data ):
     """data[user,state,time] is a numpy array"""
-    u = 0 # TODO: hard-code user for now
-    quality = zeros( all_params_dims )
-    for i in range( quality.size ):
+    best_quality = -9999999
+    # for all parameter settings
+    # compute confusion matrix, and its quality
+    for i in range( array(all_params_dims).prod() ):
         model_params_i = unravel_index( i, all_params_dims )
         print "testing parameters: %s" % [model_params_i]
-        confusion_matrix = test_classifier( model_params_i, data[u] )
+        # confusion matrix will calculated for each user, then totalled
+        confusion_matrices = zeros( [ len(users), len(states), len(states) ] )
+        for u in users:
+            confusion_matrices[u] = test_classifier( model_params_i, data[u] )
+        # total confusion matrix
+        confusion_matrix = confusion_matrices.mean(axis=0)
         print "confusion matrix:"
         print confusion_matrix
+        quality = eval_conf_matrix( confusion_matrix )
+        print "quality = %f" % quality
         print
-        quality[model_params_i] = eval_conf_matrix( confusion_matrix )
+        # keep track of best so far
+        if quality > best_quality:
+            best_quality = quality
+            best_params = model_params_i
+            best_confusion_matrix = confusion_matrix
 
-    best_params = quality.argmax()
-    # print best conf matrix
-    print test_classifier( best_params, data[u] )
+    # print best confusion matrix
+    print "best parameters: %s" % [best_params]
+    print "confusion matrix:"
+    print best_confusion_matrix
+    print "best quality = %f" % best_quality
 
 
 def test_classifier( model_params, data ):
-    """returns a confusion matrix"""
+    """returns a confusion matrix
+    arg data[state,time] is a numpy array"""
     #--- preprocess
     [ training_data, test_data ] = preprocess( data, model_params )
     #--- break into positive and negative examples for each state classifier
