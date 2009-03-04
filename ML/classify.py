@@ -146,11 +146,14 @@ domains = ["time", "freq"]
 samples = [10,100]
 # the data is modified by these mathematical operations:
 scalers = ["none","log","exp","square","sqrt"]
+# statistics to include:
+# exclusive means *only* use stats in the training vectors 
+statistics = ["none","all","exclusive"] 
 # several Machine Learning approaches are tried:
 ##methods = ["svm","neural net"]
 methods = ["svm"]
 
-all_params = [ domains, samples, scalers, methods ]
+all_params = [ domains, samples, scalers, statistics, methods ]
 all_params_dims = []
 for i in all_params: all_params_dims.append( len(i) )
 
@@ -244,7 +247,7 @@ def preprocess( data, model_params ):
     
     data[state,time] is a numpy array"""
     from numpy.fft import fft
-    [dm,spl,scl,m] = model_params
+    [dm,spl,scl,sts,m] = model_params
 
     #---- break the data into samples
     # break the data (along time axis) into given number of samples:
@@ -265,14 +268,17 @@ def preprocess( data, model_params ):
     if( domains[dm] == "freq" ):
         new_data = fft( new_data )
 
-    #---- add statistics to end of vector
+    #---- add statistics to end of vector, if appropriate
     # I beleive that these are properly called "kernel tricks"
     num_stats = len( classification_stats( new_data[0,0] ) )
     stats = zeros( [ samples[spl], len(states), num_stats ] )
-    for i in range(spl):
+    for i in range( samples[spl] ):
         for j in range(len(states)):
             stats[i,j] = classification_stats( new_data[i,j] )
-    new_data = concatenate( [new_data, stats], 2 ) # axis=2
+    if( statistics[sts] == "all" ):
+        new_data = concatenate( [new_data, stats], 2 ) # axis=2
+    elif( statistics[sts] == "exclusive" ):
+        new_data = stats # replace data with statistics
 
     #---- break into training and test fractions:
     # training data may be taken from middle, so we have to split the data
