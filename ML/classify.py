@@ -31,7 +31,7 @@ def classification_stats( elements ):
     arr = array( elements )
     stats = []
     stats.append( arr.mean() )
-#    stats.append( arr.median() )
+    #stats.append( arr.median() )
     stats.append( arr.var() )
     stats.append( arr.std() )
     stats.append( arr.min() )
@@ -178,7 +178,8 @@ def classification_param_study( data ):
         # confusion matrix will calculated for each user, then totalled
         confusion_matrices = zeros( [ len(users), len(states), len(states) ] )
         for u in users:
-            confusion_matrices[u] = test_classifier( model_params_i, data[u] )
+            confusion_matrices[u] = classifier_confusion( model_params_i,
+                                                          data[u] )
         # total confusion matrix
         confusion_matrix = confusion_matrices.mean(axis=0)
         print "confusion matrix:"
@@ -199,9 +200,9 @@ def classification_param_study( data ):
     print "best quality = %f" % best_quality
 
 
-def test_classifier( model_params, data ):
-    """returns a confusion matrix
-    arg data[state,time] is a numpy array"""
+def run_svm_state_models( model_params, data ):
+    """returns results[state_model][state_actual][vector]
+    arg data[state,time]"""
     #--- preprocess
     [ training_data, test_data ] = preprocess( data, model_params )
     #--- break into positive and negative examples for each state classifier
@@ -219,7 +220,16 @@ def test_classifier( model_params, data ):
             # the svm model assigns a numeric value \in [-1,1] to each vector
             results[s_model,s_actual] = svm_test( [test_data[:,s_actual,:],[]],
                                                   model_filenames[s_model] )[1]
+    return results
 
+
+def classifier_confusion( model_params, data ):
+    """returns a confusion matrix
+    arg data[state,time] is a numpy array
+
+    Classification is done by running data agains svm models for each state
+    and choosing the state whose model returned the highest confidence value"""
+    results = run_svm_state_models( model_params, data )
     #--- classify, ie choose the best model for each vector
     classification = results.argmax( axis=0 ) # dim: class[s_actual,vec_i]
     confusion_matrix = zeros( [ len(states), len(states) ] )
@@ -234,10 +244,8 @@ def eval_conf_matrix( confusion_matrix ):
     dim = confusion_matrix.shape[0]
     quality = 0
     for i in range( dim ):
-        for j in range( dim ):
-            if( i == j ):
-                # reward true positives
-                quality += confusion_matrix[i,j]
+        # reward true positives by simply summing the confusion matrix diagonal
+        quality += confusion_matrix[i,i]
     return quality
 
 
@@ -315,52 +323,20 @@ def make_pos_neg_vectors( data ):
     return ret
 
 
-
-def OLD_analyze_param_study( per_state_acc ):
-    """per_state_acc[user,state,domain,#samples,scaler,method,state_tested]
-    returns the parameters for the best models for each of the states"""
-    # ANALYZE RESULTS:
-    ##################
-    # summarize the accuracies of classifying each state using a weighted
-    # average accross states.
-    accuracy = per_state_acc.sum(axis=6) # sum all tested states
-    # give the positive-state samples equal total weight as negatives:
+def generate_engagement_metric( data, model_params ):
+    """arg data[ user, state, time ]"""
+    # we use a simple engagement metric which is just the sum of the svm
+    # classifier outputs for all of the 5 models.
+    results = []
+    for u in [0,1]:
+        results.append( run_svm_state_models( model_params, data[u] ) )
+    results = array(results) # dims: results[user][model_state][actual_state][]
+    # sum accross all models to get a single engagement measure for all vectors
+    results = results.sum( axis=1 )
     for s in range(len(states)):
-        accuracy[:,s] += (len(states)-1) * per_state_acc[:,s,:,:,:,:,s]
-
-    # We consider two cases:
-    # a) a model is trained for each user, using the first part of their data
-    #  In this case, we average the accuracy accross all users for each param
-    #  set.
-    # b) a single model is trained using the first part of all users' data
-    num_users = len(users) - 1
-    acc = [ accuracy[num_users],
-            accuracy[0:num_users-1].mean(axis=0) ] # avg accross users
-    PSacc = [ per_state_acc[num_users],
-              per_state_acc[0:num_users-1].mean(axis=0) ] # avg accross users
-
-    # print state-matrix best results
-    inter_state_accuracy = zeros( [2,len(states),len(states)] )
-    for i in [0,1]:
-        model_params = []
-        for s in range(len(states)):
-            argmax = unravel_index( acc[i][s].argmax(), acc[i][s].shape )
-            model_params.append( argmax )
-            inter_state_accuracy[i][s] = PSacc[i][s][argmax]
-            print "state %d, best_params=%s" % (s,argmax)
-        if i:
-            print "per-user-model ",
-        else:
-            print "single-model ",
-        print "classification results for each state's best classifier:"
-        print " Columns are the actual state."
-        print " Rows show the frequency that the state was classified as state i"
-        print " using state i's best classifier."
-        print inter_state_accuracy[i]
-        print
-
-    # return best model params (for per-user-model)
-    return model_params
+        print 
+        for i in results[:,s,:].flatten():
+            print "%d\t%f" % (s,i)
 
 
 if __name__ == "__main__":
