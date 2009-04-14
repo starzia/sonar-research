@@ -95,8 +95,8 @@ def svm_train( training_data,
     pos_weight = len(training_data[1]) / float(len(training_data[0]))
     p=Popen("svm_learn -t %d -j %f %s %s"%(type,pos_weight,in_file,model_file),
             shell=True, stdout=PIPE)
-    # kill the process if no results in 10 seconds
-    Timer( 10, my_kill, [p.pid] ).start()
+    # kill the process if no results in 600 seconds
+    Timer( 600, my_kill, [p.pid] ).start()
     output = p.communicate()[0]
     # parse out results
     match = re.search( "\((.*) misclassified,", output )
@@ -177,15 +177,19 @@ for i in all_params: all_params_dims.append( len(i) )
 
 
 class stateClassifier:
-    """a state classifier for time series data"""
+    """A state classifier for time series data.
+    Consists of several different SVM models, one for each state.
+    Each SVM model is trained one-versus-all"""
     count = 0 # number of object instances, for uniquely naming modelfiles
 
-    def __init__( self, training_data, type=0 ):
+    def __init__( self, training_data, type=0, use_CDF=0 ):
         """constructor trains a classification model.
         @param training_data[ sample_index, state, data ]
         @param type is the SVM type for svm_train"""
         self.modelfiles = []
         self.training_CDFs = []
+        self.CDF_zerocrossing = []
+        self.use_CDF = use_CDF
         stateClassifier.count += 1
         
         #--- break into positive and neg. examples for each state classifier
@@ -206,6 +210,38 @@ class stateClassifier:
                                 self.modelfiles[s_model] )[1]
             # make (an inverse?) training_CDF from results by sorting data
             self.training_CDFs.append( sort(results) )
+            self.CDF_zerocrossing.append( self.calc_percentile( s_model,
+                                                                0.0 ) )
+
+    def calc_percentile( self, model_num, val ):
+        """@return the percentile of val in model (state) number model_num,
+        based on the CDF of training data values."""
+        index = searchsorted( self.training_CDFs[model_num], val )
+        # normalize to [0,1]
+        return index / float( self.training_CDFs[model_num].size )
+
+
+    def run_svm( self,test_data ):
+        """A helper function for classify() and engament_metric()
+
+        @param test_data[sample_index,data]
+        @return [ results[model_state,sample_index],
+                  percentile[model_state,sample_index] ]"""
+        # run data through SVMs
+        results = []
+        percentile = []
+        for s_model in range( len(states) ):
+            # get raw SVM results (distances)
+            results.append( svm_test( [test_data, [] ],
+                                      self.modelfiles[s_model] )[1] )
+            # convert distances into percentile using training_CDF
+            rp = [] # results percentiles
+            for r in results[s_model]:
+                rp.append( self.calc_percentile( s_model, r ) )
+            percentile.append( rp )
+        percentile = array( percentile )
+        return [ results, percentile ]
+
 
     def classify( self, test_data ):
         """For each test vector, classification done by:
@@ -215,21 +251,30 @@ class stateClassifier:
 
         @param test_data[sample_index,data]
         @return state index"""
-        # run data through SVMs
-        percentile = []
-        for s_model in range( len(states) ):
-            # get raw SVM results (distances)
-            results = svm_test( [test_data, [] ], self.modelfiles[s_model] )[1]
-            # convert distances into percentile using training_CDF
-            rp = [] # results percentiles
-            for r in results:
-                rp.append( searchsorted( self.training_CDFs[s_model], r ) )
-            percentile.append( rp )
-        percentile = array( percentile )
-        # for each data vector, choose state model which produced the highest
-        # percentile value
-        return percentile.argmax( axis=0 )
+        [ results, percentile ] = self.run_svm( test_data )
+        if self.use_CDF:
+            # for \E data vector, choose state model which produced the highest
+            # percentile value
+            return percentile.argmax( axis=0 )
+        else:
+            # chose model with best absolute result
+            return results.argmax( axis=0 )
     
+    def engagement_metric( self, test_data ):
+        """return engagement values for the test_data, based on the trained
+        classifiers
+
+        @param test_data[sample_index,data]
+        @return engagement metric[sample_index]"""
+        [ results, percentile ] = self.run_svm( test_data )
+        n = test_data.shape[0] # number of samples
+        output = zeros(n)
+        for s_model in range( len(states) ):
+            output += s_model * ( percentile[s_model] -
+                                  self.CDF_zerocrossing[s_model] * ones(n) )
+        return output
+        
+
     def dealloc( self ):
         """destructor"""
         import os
@@ -240,8 +285,10 @@ class stateClassifier:
 
 
 def flatten_users( data ):
-    """data[user,state,time] is a numpy array
-    combines data from all users into one super-user"""
+    """combines data from all users into one super-user
+    
+    @param data[user,state,time] is a numpy array
+    @return new_data[state,time]"""
     # collapse users axis:
     shape = data.shape
     new_data = data.reshape( ( 1, shape[1], shape[2]*shape[0] ) )
@@ -276,54 +323,32 @@ def compute_conf_matrix( i,data,scores ):
     print "quality = %f" % scores[i]
     print
 
-
 def classification_param_study( data, np=1 ):
     """executes in parallel.
 
     @param np is the number of simultaneous processes to use.
     @param data[user,state,time] is a numpy array"""
-    import pp #parallel processing module
-    jobserver = pp.Server()
+    #                                   import pp #parallel processing module
+    #                                   jobserver = pp.Server()
 
     # for all parameter settings
     # compute confusion matrix, and its quality
     param_space_size = array(all_params_dims).prod()
     scores = zeros( param_space_size ) #track quality of all confusion matrices
     for i in range( param_space_size ):
-        jobserver.submit( compute_conf_matrix, [i,data,scores] )
+        ##jobserver.submit( compute_conf_matrix, (i,data,scores) )
+        compute_conf_matrix(i,data,scores)
 
-    # wait for for all jobs to finish
-    jobserver.wait() 
+    #                                   # wait for for all jobs to finish
+    #                                   jobserver.wait()
     best_params = unravel_index( scores.argmax(), all_params_dims )
 
     # print best confusion matrix
     print "best parameters: %s" % [best_params]
     #print "confusion matrix:"
     #print best_confusion_matrix
-    print "best quality = %f" % score.max()
-
-
-def run_svm_state_models( model_params, data ):
-    """returns results[state_model][state_actual][vector]
-    arg data[state,time]"""
-    #--- preprocess
-    [ training_data, test_data ] = preprocess( data, model_params )
-    #--- break into positive and negative examples for each state classifier
-    training_vectors = make_pos_neg_vectors( training_data )
-    #--- build models
-    model_filenames = []
-    for s in range( len(states) ):
-        model_filenames.append( "/tmp/svm_model%d"%s )
-        svm_train( training_vectors[s], model_filenames[s] )
-    #--- run test vectors through each model
-    num_vectors_per_state = samples[ model_params[1] ] * (1-training_frac)
-    results = zeros( [ len(states), len(states), num_vectors_per_state ] )
-    for s_model in range( len(states) ):
-        for s_actual in range( len(states) ):
-            # the svm model assigns a numeric value \in [-1,1] to each vector
-            results[s_model,s_actual] = svm_test( [test_data[:,s_actual,:],[]],
-                                                  model_filenames[s_model] )[1]
-            return results
+    print "best quality = %f" % scores.max()
+    print scores
 
 
 def classifier_confusion( model_params, data ):
@@ -434,20 +459,20 @@ def make_pos_neg_vectors( data ):
     return ret
 
 
-def generate_engagement_metric( data, model_params ):
+def engagement_metric_study( data, model_params ):
     """@param data[ user, state, time ]"""
-    # we use a simple engagement metric which is just the sum of the svm
-    # classifier outputs for all of the 5 models.
-    results = []
-    for u in [0,1]:
-        results.append( run_svm_state_models( model_params, data[u] ) )
-    results = array(results) # dims: results[user][model_state][actual_state][]
-    # sum accross all models to get a single engagement measure for all vectors
-    results = results.sum( axis=1 )
-    for s in range(len(states)):
-        print 
-        for i in results[:,s,:].flatten():
-            print "%d\t%f" % (s,i)
+    for u in range(data.shape[0]):
+        #- preprocess
+        class_mthd = model_params[4] # classification method
+        [ training_data, test_data ] = preprocess( data[u], model_params )
+        #- train classifier
+        classifier = stateClassifier( training_data, class_mthd )
+        #- for \E actual state: classify, ie choose the best model for each vector
+        for s_actual in range( len(states) ):
+            eng = classifier.engagement_metric( test_data[s_actual])
+            for e in eng:
+                print "%d %f" % (s_actual,e)
+        classifier.dealloc() # destructor
 
 
 if __name__ == "__main__":
@@ -457,5 +482,6 @@ if __name__ == "__main__":
         sys.exit(-1)
     else:
         arr = load( sys.argv[1] )
-        ret = classification_param_study( arr )
-                   
+        #classification_param_study( arr )
+        #print classifier_confusion( [0,1,2,1,0], flatten_users(arr)[0] )
+        engagement_metric_study( arr, [0,1,2,1,0] )          
