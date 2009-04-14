@@ -248,42 +248,59 @@ def flatten_users( data ):
     return new_data
 
 
-def classification_param_study( data ):
-    """data[user,state,time] is a numpy array"""
-    best_quality = -9999999
+def compute_conf_matrix( i,data,scores ):
+    """
+    @param i parameter index
+    @param data
+    @param scores an array of scores for the entire parameter space.  This is
+           passed by reference and we store the result in this array at index i
+    """
+    model_params_i = unravel_index( i, all_params_dims )
+    print "testing parameters: %s" % [model_params_i]
+    
+    # confusion matrix will calculated for each user, then totalled
+    confusion_matrices = zeros( [ len(users), len(states), len(states) ] )
+    for u in users:
+        try:
+            confusion_matrices[u] = classifier_confusion( model_params_i,
+                                                          data[u] )
+        except:
+            # if classification fails, we will actually have a zero-filled
+            # confusion matrix, so N.B. column sums may be less than one 
+            pass
+    # total confusion matrix
+    confusion_matrix = confusion_matrices.mean(axis=0)
+    print "confusion matrix:"
+    print confusion_matrix
+    scores[i] = eval_conf_matrix( confusion_matrix )
+    print "quality = %f" % scores[i]
+    print
+
+
+def classification_param_study( data, np=1 ):
+    """executes in parallel.
+
+    @param np is the number of simultaneous processes to use.
+    @param data[user,state,time] is a numpy array"""
+    import pp #parallel processing module
+    jobserver = pp.Server()
+
     # for all parameter settings
     # compute confusion matrix, and its quality
-    for i in range( array(all_params_dims).prod() ):
-        model_params_i = unravel_index( i, all_params_dims )
-        print "testing parameters: %s" % [model_params_i]
-        # confusion matrix will calculated for each user, then totalled
-        confusion_matrices = zeros( [ len(users), len(states), len(states) ] )
-        for u in users:
-            try:
-                confusion_matrices[u] = classifier_confusion( model_params_i,
-                                                              data[u] )
-            except:
-                # if classification fails, we will actually have a zero-filled
-                # confusion matrix, so N.B. column sums may be less than one 
-                pass
-        # total confusion matrix
-        confusion_matrix = confusion_matrices.mean(axis=0)
-        print "confusion matrix:"
-        print confusion_matrix
-        quality = eval_conf_matrix( confusion_matrix )
-        print "quality = %f" % quality
-        print
-        # keep track of best so far
-        if quality > best_quality:
-            best_quality = quality
-            best_params = model_params_i
-            best_confusion_matrix = confusion_matrix
+    param_space_size = array(all_params_dims).prod()
+    scores = zeros( param_space_size ) #track quality of all confusion matrices
+    for i in range( param_space_size ):
+        jobserver.submit( compute_conf_matrix, [i,data,scores] )
+
+    # wait for for all jobs to finish
+    jobserver.wait() 
+    best_params = unravel_index( scores.argmax(), all_params_dims )
 
     # print best confusion matrix
     print "best parameters: %s" % [best_params]
-    print "confusion matrix:"
-    print best_confusion_matrix
-    print "best quality = %f" % best_quality
+    #print "confusion matrix:"
+    #print best_confusion_matrix
+    print "best quality = %f" % score.max()
 
 
 def run_svm_state_models( model_params, data ):
@@ -399,8 +416,9 @@ def preprocess( data, model_params ):
     
 
 def make_pos_neg_vectors( data ):
-    """return ret[ state ][pos/neg ][ sample_index, data ]
-    arg data[ sample_index, state, data ]"""
+    """
+    @return ret[ state ][pos/neg ][ sample_index, data ]
+    @param data[ sample_index, state, data ]"""
     ret = []
     for s in range(len(states)):
         ret.append([])
@@ -417,7 +435,7 @@ def make_pos_neg_vectors( data ):
 
 
 def generate_engagement_metric( data, model_params ):
-    """arg data[ user, state, time ]"""
+    """@param data[ user, state, time ]"""
     # we use a simple engagement metric which is just the sum of the svm
     # classifier outputs for all of the 5 models.
     results = []
