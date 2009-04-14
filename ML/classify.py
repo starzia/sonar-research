@@ -72,11 +72,17 @@ def svm_light_format( training_data, in_file ):
     
 
 def svm_train( training_data,
-               model_file="/tmp/svm.model", in_file="/tmp/svm.in" ):
+               model_file="/tmp/svm.model", in_file="/tmp/svm.in",
+               type=0):
     """
     @param training_data[ pos/neg ][ sample_index, data ]
     @param model_file is the primary output and
     @param in_file is a debugging output.
+    @param method is the SVM type:
+          0 = linear SVM
+          1 = polynomial SVM
+          2 = radial basis function SVM
+          3 = sigmoid tanh SVM
     @return success bool."""
     from subprocess import Popen,PIPE
     import re
@@ -87,8 +93,8 @@ def svm_train( training_data,
     # weight positive examples by a factor so that pos and neg accuracy
     # have the same cumulative weight when training
     pos_weight = len(training_data[1]) / float(len(training_data[0]))
-    p = Popen("svm_learn -t 0 -j %f %s %s" % (pos_weight,in_file,model_file),
-              shell=True, stdout=PIPE)
+    p=Popen("svm_learn -t %d -j %f %s %s"%(type,pos_weight,in_file,model_file),
+            shell=True, stdout=PIPE)
     # kill the process if no results in 10 seconds
     Timer( 10, my_kill, [p.pid] ).start()
     output = p.communicate()[0]
@@ -163,7 +169,7 @@ scalers = ["none","log","exp","square","sqrt"]
 statistics = ["none","all","exclusive"] 
 # several Machine Learning approaches are tried:
 ##methods = ["svm","neural net"]
-methods = ["svm"]
+methods = ["svm_lin","svm_poly","svm_rad","svm_sig"]
 
 all_params = [ domains, samples, scalers, statistics, methods ]
 all_params_dims = []
@@ -174,9 +180,10 @@ class stateClassifier:
     """a state classifier for time series data"""
     count = 0 # number of object instances, for uniquely naming modelfiles
 
-    def __init__( self, training_data ):
+    def __init__( self, training_data, type=0 ):
         """constructor trains a classification model.
-        @param training_data[ sample_index, state, data ]"""
+        @param training_data[ sample_index, state, data ]
+        @param type is the SVM type for svm_train"""
         self.modelfiles = []
         self.training_CDFs = []
         stateClassifier.count += 1
@@ -187,7 +194,8 @@ class stateClassifier:
         filename_base = "/tmp/model.%d." % stateClassifier.count
         for s in range( len(states) ):
             self.modelfiles.append( "%s%d" % (filename_base,s) )
-            svm_train( training_vectors[s], self.modelfiles[s] )
+            svm_train( training_vectors[s], self.modelfiles[s],
+                       "/tmp/svm.in", type )
         #--- build CDF of distance value for training data under each model
         shape = training_data.shape
         # run data for all states through new SVMs
@@ -308,9 +316,10 @@ def classifier_confusion( model_params, data ):
     Classification is done by running data agains svm models for each state
     and choosing the state whose model returned the highest confidence value"""
     #- preprocess
+    class_mthd = model_params[4] # classification method
     [ training_data, test_data ] = preprocess( data, model_params )
     #- train classifier
-    classifier = stateClassifier( training_data )
+    classifier = stateClassifier( training_data, class_mthd )
     #- for \E actual state: classify, ie choose the best model for each vector
     confusion_matrix = zeros( [ len(states), len(states) ] )
     for s_actual in range( len(states) ):
@@ -318,7 +327,7 @@ def classifier_confusion( model_params, data ):
         confusion_matrix[:,s_actual] = histogram( classification,
                                                   range(len(states)),
                                                   normed=True )[0]
-    classifier.dealloc()
+    classifier.dealloc() # destructor
     return confusion_matrix
 
 
