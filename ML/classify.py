@@ -158,6 +158,7 @@ training_slice=0
 users = range( 20 )
 # we will be comparing each state to all other states
 states = ["typing","video","phone","puzzle","absent"]
+eng_weight = [4,3,2,1,0] # weights for states in engagement metric calculation
 # we look at both the time-domain sample sequence and a freq-domain rep.:
 domains = ["time", "freq"]
 # we break the time-series data into this many samples (windows):
@@ -270,8 +271,8 @@ class stateClassifier:
         n = test_data.shape[0] # number of samples
         output = zeros(n)
         for s_model in range( len(states) ):
-            output += s_model * ( percentile[s_model] -
-                                  self.CDF_zerocrossing[s_model] * ones(n) )
+            output += eng_weight[s_model] * ( percentile[s_model] -
+                                     self.CDF_zerocrossing[s_model] * ones(n) )
         return output
         
 
