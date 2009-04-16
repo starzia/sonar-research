@@ -5,6 +5,12 @@
 
 from numpy import *
 
+# add ../recorder to module search path
+import sys
+sys.path = ['../recorder'] + sys.path
+from extras import * # located in ../recorder/extras.py
+
+
 def assert_file_exists( filename ):
     from os.path import exists
     if( not exists( filename ) ):
@@ -95,8 +101,8 @@ def svm_train( training_data,
     pos_weight = len(training_data[1]) / float(len(training_data[0]))
     p=Popen("svm_learn -t %d -j %f %s %s"%(type,pos_weight,in_file,model_file),
             shell=True, stdout=PIPE)
-    # kill the process if no results in 600 seconds
-    Timer( 600, my_kill, [p.pid] ).start()
+    # kill the process if no results in 20 seconds
+    Timer( 20, my_kill, [p.pid] ).start()
     output = p.communicate()[0]
     # parse out results
     match = re.search( "\((.*) misclassified,", output )
@@ -167,9 +173,8 @@ samples = [10,100]
 scalers = ["none","log","exp","square","sqrt"]
 # statistics to include:
 # exclusive means *only* use stats in the training vectors 
-statistics = ["none","all","exclusive"] 
+statistics = ["none","all","exclusive"]
 # several Machine Learning approaches are tried:
-##methods = ["svm","neural net"]
 methods = ["svm_lin","svm_poly","svm_rad","svm_sig"]
 
 all_params = [ domains, samples, scalers, statistics, methods ]
@@ -240,8 +245,7 @@ class stateClassifier:
             for r in results[s_model]:
                 rp.append( self.calc_percentile( s_model, r ) )
             percentile.append( rp )
-        percentile = array( percentile )
-        return [ results, percentile ]
+        return [ array(results), array(percentile) ]
 
 
     def classify( self, test_data ):
@@ -271,8 +275,10 @@ class stateClassifier:
         n = test_data.shape[0] # number of samples
         output = zeros(n)
         for s_model in range( len(states) ):
-            output += eng_weight[s_model] * ( percentile[s_model] -
-                                     self.CDF_zerocrossing[s_model] * ones(n) )
+#            output += eng_weight[s_model] * ( percentile[s_model] -
+#                                     self.CDF_zerocrossing[s_model] * ones(n) )
+            output += eng_weight[s_model] * results[s_model] * (
+                results[s_model]>0)
         return output
         
 
@@ -349,15 +355,15 @@ def classification_param_study( data, np=1 ):
     #print "confusion matrix:"
     #print best_confusion_matrix
     print "best quality = %f" % scores.max()
-    print scores
 
 
 def classifier_confusion( model_params, data ):
-    """returns a confusion matrix
-    arg data[state,time] is a numpy array
+    """Classification is done by running data agains svm models for each state
+    and choosing the state whose model returned the highest confidence value
 
-    Classification is done by running data agains svm models for each state
-    and choosing the state whose model returned the highest confidence value"""
+    @param data[state,time] is a numpy array
+    @return a confusion matrix"""
+
     #- preprocess
     class_mthd = model_params[4] # classification method
     [ training_data, test_data ] = preprocess( data, model_params )
@@ -483,6 +489,6 @@ if __name__ == "__main__":
         sys.exit(-1)
     else:
         arr = load( sys.argv[1] )
-        #classification_param_study( arr )
+        classification_param_study( arr )
         #print classifier_confusion( [0,1,2,1,0], flatten_users(arr)[0] )
-        engagement_metric_study( arr, [0,1,2,1,0] )          
+        #engagement_metric_study( arr, [0,1,2,1,0] )          

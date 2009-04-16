@@ -583,6 +583,30 @@ def process_recording( audio_buffer, freq, num_divisions, NUM_SAMPLES=10 ):
              stats[:,1].max(), stats[:,1].min(),
              stats[:,0].var() ]
 
+
+def bartlett_recording( audio_buffer, args=[20000,500,10] ):
+    """Divides the buffer into the specified number of divisions.
+    Each division is further divided into NUM_SAMPLES pieces when Bartlett's
+    method is called.
+    The frequency's energy is calculated in each piece and then the variance
+    and mean is calculated within each division.
+
+    @return array of num_divisions intensity values"""
+    freq=args[0]
+    num_divisions=args[1]
+    NUM_SAMPLES=args[2] ):
+
+    intensities = empty( (num_divisions,) )
+
+    window_size = audio_length( audio_buffer ) / num_divisions
+    # move non-overlapping sliding window accross recording
+    for i in range(num_divisions):
+        window_buf = audio_window( audio_buffer, window_size,
+                                   i*window_size )
+        intensities[i] = bartlett( window_buf, freq, NUM_SAMPLES )
+    return intensities
+
+
 def randomly_order( my_list ):
     """returns a random permutation of the passed list."""
     from random import random
@@ -746,7 +770,7 @@ def process_all_recordings( data_directory,
 
 def mean_of_var( buf, args=[[50],20000] ):
     """processes the recording a list of statistics:
-        results[num_divisions][mean/var]
+        results[num_divisions][statistic_type]
     args is split into [divisions,frequency]
     divisions is a list with the number of partitions to split each recording
     into when calculating the variance of intensity."""
@@ -758,12 +782,16 @@ def mean_of_var( buf, args=[[50],20000] ):
         results.append( process_recording( buf, freq, div ))
     return results
 
-
 def usenix09_results():
     a = process_all_recordings( "/home/steve/svn/sonar/data/local_study",
                                 mean_of_var, [[50],20000] )
     return array( a )
 
+def ubicomp09_results():
+    """gives the power in the 20khz spectrum channel"""
+    a = process_all_recordings( "/home/steve/svn/sonar/data/local_study",
+                                bartlett_recording, [20000,500,10] )
+    return array( a )
 
 # for the paper data used divisions=50, out3.dat has divisions=[5,50,500]
 def write_data( arr, stat=1, div_index=1,
