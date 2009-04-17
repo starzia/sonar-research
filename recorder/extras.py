@@ -817,6 +817,18 @@ def ubicomp09_errorbars( a, divisions=10 ):
     errorbars[:,:,2] = window_results.max(axis=0)
     return errorbars
 
+def ubicomp09_hw_analysis( a ):
+    """calculates, for all mic/speaker combinations the mean ration of video
+    echo delta to absent echo delta.
+
+    @return ratio[4,4]"""
+    
+    b = zeros((4,4,20,5))
+    for i in range(4):
+        for j in range(4):
+            b[i,j] = ubicomp09_plot( a[:,:,i,j] )
+    return ( b[:,:,:,1] / b[:,:,:,4] ).mean(axis=2)
+            
 # for the paper data used divisions=50, out3.dat has divisions=[5,50,500]
 def write_data( arr, stat=1, div_index=1,
                 DIR = "/home/steve/svn/sonar/data/local_study/processed/" ):
