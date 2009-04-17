@@ -560,6 +560,29 @@ def bartlett( audio_buffer, freq, NUM_SAMPLES=10 ):
     intensities = log10( array( intensities ) )
     return [ intensities.mean(), intensities.var() ]
 
+def bartlett_recording( audio_buffer, args=[20000,500,10] ):
+    """Divides the buffer into the specified number of divisions.
+    Each division is further divided into NUM_SAMPLES pieces when Bartlett's
+    method is called.
+    The frequency's energy is calculated in each piece and then the variance
+    and mean is calculated within each division.
+
+    @return array of num_divisions intensity values"""
+    freq=args[0]
+    num_divisions=args[1]
+    NUM_SAMPLES=args[2]
+
+    intensities = empty( (num_divisions,) )
+
+    window_size = audio_length( audio_buffer ) / num_divisions
+    # move non-overlapping sliding window accross recording
+    for i in range(num_divisions):
+        window_buf = audio_window( audio_buffer, window_size,
+                                   i*window_size )
+        intensities[i] = bartlett( window_buf, freq, NUM_SAMPLES )[0]
+    return intensities
+
+
 def process_recording( audio_buffer, freq, num_divisions, NUM_SAMPLES=10 ):
     """Divides the buffer into the specified number of divisions.
     Each division is further divided into NUM_SAMPLES pieces when Bartlett's
@@ -582,29 +605,6 @@ def process_recording( audio_buffer, freq, num_divisions, NUM_SAMPLES=10 ):
     return [ stats[:,0].mean(), stats[:,1].mean(), 
              stats[:,1].max(), stats[:,1].min(),
              stats[:,0].var() ]
-
-
-def bartlett_recording( audio_buffer, args=[20000,500,10] ):
-    """Divides the buffer into the specified number of divisions.
-    Each division is further divided into NUM_SAMPLES pieces when Bartlett's
-    method is called.
-    The frequency's energy is calculated in each piece and then the variance
-    and mean is calculated within each division.
-
-    @return array of num_divisions intensity values"""
-    freq=args[0]
-    num_divisions=args[1]
-    NUM_SAMPLES=args[2] ):
-
-    intensities = empty( (num_divisions,) )
-
-    window_size = audio_length( audio_buffer ) / num_divisions
-    # move non-overlapping sliding window accross recording
-    for i in range(num_divisions):
-        window_buf = audio_window( audio_buffer, window_size,
-                                   i*window_size )
-        intensities[i] = bartlett( window_buf, freq, NUM_SAMPLES )
-    return intensities
 
 
 def randomly_order( my_list ):
@@ -792,6 +792,30 @@ def ubicomp09_results():
     a = process_all_recordings( "/home/steve/svn/sonar/data/local_study",
                                 bartlett_recording, [20000,500,10] )
     return array( a )
+
+def ubicomp09_plot( a ):
+    """calculates the mean of abs(deltas)
+    
+    @param a[user,state,sample]
+    @return deltas[user,state]"""
+    diffs = a[:,:,1:] - a[:,:,0:a.shape[2]-1]
+    return abs(diffs).mean(axis=2)
+
+def ubicomp09_errorbars( a, divisions=10 ):
+    """
+    @param a[user,state,sample]
+    @return a[user,state,avg/min/max]"""
+    window_results = zeros( (divisions,a.shape[0],a.shape[1]) )
+    errorbars = zeros( (a.shape[0],a.shape[1],3) )
+    samples = a.shape[2]
+    samples_per_division = samples/divisions
+    for i in range(divisions):
+        window = a[:,:, i*samples_per_division:(i+1)*samples_per_division ]
+        window_results[i] = ubicomp09_plot( window )
+    errorbars[:,:,0] = window_results.mean(axis=0)
+    errorbars[:,:,1] = window_results.min(axis=0)
+    errorbars[:,:,2] = window_results.max(axis=0)
+    return errorbars
 
 # for the paper data used divisions=50, out3.dat has divisions=[5,50,500]
 def write_data( arr, stat=1, div_index=1,
