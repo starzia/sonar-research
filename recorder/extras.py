@@ -788,7 +788,9 @@ def usenix09_results():
     return array( a )
 
 def ubicomp09_results():
-    """gives the power in the 20khz spectrum channel"""
+    """gives the power in the 20khz spectrum channel
+
+    @return a[user,state,mic,speaker,sample]"""
     a = process_all_recordings( "/home/steve/svn/sonar/data/local_study",
                                 bartlett_recording, [20000,500,10] )
     return array( a )
@@ -829,10 +831,10 @@ def ubicomp09_hw_analysis( a ):
             b[i,j] = ubicomp09_plot( a[:,:,i,j] )
     return ( b[:,:,:,1] / b[:,:,:,4] ).mean(axis=2)
             
-# for the paper data used divisions=50, out3.dat has divisions=[5,50,500]
+# for usenix paper data used divisions=50, out3.dat has divisions=[5,50,500]
 def write_data( arr, stat=1, div_index=1,
                 DIR = "/home/steve/svn/sonar/data/local_study/processed/" ):
-    """This is useful only for the array returned by usernix2009_results"""
+    """This is useful only for the array returned by usenix2009_results"""
     for rec_dev in [0,1,2,3]:
         for play_dev in [0,1,2,3]:
             f = open( "%s/%d_%d.%d.txt" % (DIR,rec_dev,play_dev,stat), "w" )
