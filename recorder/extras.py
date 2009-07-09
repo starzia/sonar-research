@@ -831,6 +831,44 @@ def ubicomp09_hw_analysis( a ):
             b[i,j] = ubicomp09_plot( a[:,:,i,j] )
     return ( b[:,:,:,1] / b[:,:,:,4] ).mean(axis=2)
             
+def ubicomp09_conf_matrix( a, divisions=5 ):
+    """Calculates a confusion matrix for a simple kind of video/absent state
+    classifier which simply takes the geometric mean of the training absent and
+    video state values as a threshold
+
+    @param a[user,state,sample]
+    @return a[actual_present(0/1),predicted_present(0/1)]"""
+    num_users = a.shape[0]
+    num_states = a.shape[1]
+    num_samples = a.shape[2]
+    samples_per_division = num_samples/divisions
+    window_echodelta = zeros( (divisions,num_users,num_states) )
+
+    #===== calculate echo delta
+    for i in range(divisions):
+        window = a[:,:, i*samples_per_division:(i+1)*samples_per_division ]
+        window_echodelta[i] = ubicomp09_plot( window )
+
+    #===== classify
+    # initially, record with users separately, trying every pair of windows as training
+    conf_matrix = zeros((num_users,divisions,divisions,2,2)) 
+    # using each pair of windows as a training set
+    video = window_echodelta[:,:,1]
+    absent = window_echodelta[:,:,4]
+    for i in range(divisions):
+        for j in range(divisions):
+            # threshold is geometric mean of two training values
+            threshold = ( video[i] * absent[j] * absent[j] )**0.3333
+                                               # sum over all windows
+            conf_matrix[:,i,j,0,0] = ( absent < threshold ).mean(axis=0) 
+            conf_matrix[:,i,j,0,1] = ( absent >= threshold ).mean(axis=0)
+            conf_matrix[:,i,j,1,0] = ( video < threshold ).mean(axis=0)
+            conf_matrix[:,i,j,1,1] = ( video >= threshold ).mean(axis=0)
+
+    # average over all training sets and users
+    return conf_matrix.mean(axis=2).mean(axis=1).mean(axis=0)
+
+
 # for usenix paper data used divisions=50, out3.dat has divisions=[5,50,500]
 def write_data( arr, stat=1, div_index=1,
                 DIR = "/home/steve/svn/sonar/data/local_study/processed/" ):
