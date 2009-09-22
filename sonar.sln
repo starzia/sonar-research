@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sonar", "portable_sonar\sonar.vcproj", "{915B0850-48D9-43B0-A648-50DB031A39DB}"
+EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "installer", "installer\installer.vdproj", "{7D1748EC-6B37-41E9-8A57-EA02AD9C80C0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{915B0850-48D9-43B0-A648-50DB031A39DB}.Debug|Win32.ActiveCfg = Debug|Win32
+		{915B0850-48D9-43B0-A648-50DB031A39DB}.Debug|Win32.Build.0 = Debug|Win32
+		{915B0850-48D9-43B0-A648-50DB031A39DB}.Release|Win32.ActiveCfg = Release|Win32
+		{915B0850-48D9-43B0-A648-50DB031A39DB}.Release|Win32.Build.0 = Release|Win32
+		{7D1748EC-6B37-41E9-8A57-EA02AD9C80C0}.Debug|Win32.ActiveCfg = Debug
+		{7D1748EC-6B37-41E9-8A57-EA02AD9C80C0}.Debug|Win32.Build.0 = Debug
+		{7D1748EC-6B37-41E9-8A57-EA02AD9C80C0}.Release|Win32.ActiveCfg = Release
+		{7D1748EC-6B37-41E9-8A57-EA02AD9C80C0}.Release|Win32.Build.0 = Release
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
