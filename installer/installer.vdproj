@@ -119,34 +119,6 @@
     {
         "CustomAction"
         {
-            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_2FFBE8543FB74E0BAAFB1A96208D9E17"
-            {
-            "Name" = "8:clear_config.vbs"
-            "Condition" = "8:"
-            "Object" = "8:_04B95549068E4C5E9BE016358AE9FB1F"
-            "FileType" = "3:4"
-            "InstallAction" = "3:4"
-            "Arguments" = "8:"
-            "EntryPoint" = "8:"
-            "Sequence" = "3:1"
-            "Identifier" = "8:_CA819465_8E1F_4681_A36F_80A33FAB33F7"
-            "InstallerClass" = "11:FALSE"
-            "CustomActionData" = "8:"
-            }
-            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_FD649B06329B4E76829D1E746B8A75FF"
-            {
-            "Name" = "8:clear_config.vbs"
-            "Condition" = "8:"
-            "Object" = "8:_04B95549068E4C5E9BE016358AE9FB1F"
-            "FileType" = "3:4"
-            "InstallAction" = "3:1"
-            "Arguments" = "8:"
-            "EntryPoint" = "8:"
-            "Sequence" = "3:1"
-            "Identifier" = "8:_AE1F9CD7_E326_4926_A893_BC13977A95EF"
-            "InstallerClass" = "11:FALSE"
-            "CustomActionData" = "8:"
-            }
         }
         "DefaultFeature"
         {
@@ -354,7 +326,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:SonarPM"
         "ProductCode" = "8:{C0BECF26-53E9-4F08-8BC0-F908AE3A5756}"
-        "PackageCode" = "8:{B8C97542-CE7E-4DEA-8B90-EEE060030955}"
+        "PackageCode" = "8:{63BC2758-5CC0-404A-8B39-C7A19689129F}"
         "UpgradeCode" = "8:{49807CC8-B24E-457D-B85F-ABAA7E580A2C}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:FALSE"
