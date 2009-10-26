@@ -1,7 +1,7 @@
 BEGIN{ 
   timestamp=0;
   install_time=0;
-  app_start_time=0;
+  thread_start_time=0;
   total_runtime=0;
   new_file=0; /* set if the previous line had $2 == "file_end" */
   max_delta=15000000; /* ~173 days */
@@ -32,6 +32,7 @@ BEGIN{
     if( install_time == 0 ){
       /* record initial time */
       install_time = $1;
+      thread_start_time = $1; /* this shouldn't be necessary, but is */
     }
     if( $1 < timestamp ){
        /* we just went backward in time! */
@@ -48,10 +49,10 @@ BEGIN{
     }
     printf( "\t%s\n", $1 );
   }
-  if(( $2 ~ /begin/ ) || ( $2 ~ /resume/ )){  app_start_time = timestamp; }
+  if(( $2 ~ /begin/ ) || ( $2 ~ /resume/ )){  thread_start_time = timestamp; }
   if(( $2 ~ /end/ ) || ( $2 ~ /suspend/ )){
-    total_runtime += timestamp - app_start_time;
-    app_start_time = timestamp; /* just to be safe */ 
+    total_runtime += timestamp - thread_start_time;
+    thread_start_time = timestamp; /* just to be safe */ 
   }
 }
 END{

@@ -19,7 +19,8 @@ echo "plot user retention"
 for i in `seq 0 99`; do
   echo $i `$FIND_LOGS | grep "\.$i\.log\.gz"|wc -l`
 done > log_indices.txt
-echo "$PLT_COMMON set output 'log_indices.png'; set logscale y; \
+echo "$PLT_COMMON set output 'log_indices.png'; \
+set xrange [0.01:]; set logscale y; \
 set xlabel 'at least this many log files (one log per hour or app launch)'; \
 set ylabel '# of users'; \
 plot 'log_indices.txt' using 1:2 with lines;" |gnuplot
@@ -65,11 +66,13 @@ for stat in total_duration total_runtime; do
   done
   cat ${stat}.txt | sort -r -n > ${stat}.txt2
   mv ${stat}.txt2 ${stat}.txt
-  echo "$PLT_COMMON set output '${stat}.png'; set logscale y; set logscale x; \
-  set xlabel '${stat} at least this many hours'; \
-  set ylabel '# of users'; \
-  plot '${stat}.txt' using (\$1/3600):0 with lines;" |gnuplot
 done
+ echo "$PLT_COMMON set output 'duration.png'; set logscale y; set logscale x; \
+  set xlabel 'at least this many hours'; \
+  set ylabel '# of users'; \
+  plot 'total_duration.txt' using (\$1/3600):0 with lines, \
+       'total_runtime.txt' using (\$1/3600):0 with lines;" |gnuplot
+
 
 # plot a histogram of model keywords
 echo "Model keyword historgram"
