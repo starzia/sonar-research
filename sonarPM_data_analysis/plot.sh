@@ -73,10 +73,10 @@ for log in users/*.log; do
       install_time=0;
       app_start_time=0;
       total_runtime=0;
-      max_delta=3600*24*30; /* one month */
+      /* max_delta=3600*24*7; one week */
     }
     /./{
-      if( $1 > max_delta ){
+      if( $1 > ( timestamp - 60 ) ){ /* 60 second leeway for aynch disk access */
         /* absolute timestamp */
         if( timestamp == 0 ){
           /* record initial time */2
@@ -91,36 +91,32 @@ for log in users/*.log; do
         for(i=2;i<=NF;i++){
           printf( "%s ", $i );
         }
-        printf( "\n" );
+        printf( "\t%s\n", $1 );
       }
+
+      if(( $2 ~ /begin/ ) || ( $2 ~ /resume/ )){  app_start_time = timestamp; }
+      if(( $2 ~ /end/ ) || ( $2 ~ /suspend/ )){
+        total_runtime += timestamp - app_start_time;
+        app_start_time = timestamp; /* just to be safe */ 
+      }
+      /* TODO: battery, AC */
     }
-    (( $1 ~ /begin/ ) || ( $1 ~ /resume/ )){  app_start_time = timestamp; }
-    (( $1 ~ /end/ ) || ( $1 ~ /suspend/ )){
-      total_runtime += timestamp - app_start_time;
-      app_start_time = timestamp; /* just to be safe */ 
-    }
-    /^battery/{}
-    /^AC/{}
     END{
-      printf( "%d total_duration %d\n", timestamp, timestamp-starttime );
+      printf( "%d total_duration %d\n", timestamp, timestamp-install_time );
       printf( "%d total_runtime %d\n", timestamp, total_runtime );
     }
   ' > ${log}2
-  mv ${log}2 $log
 done
 
 
 # plot runtime and duration CDFs
 for stat in total_duration total_runtime; do
   > ${stat}.txt
-  for log in users/*.log; do
+  for log in users/*.log2; do
     tail $log | grep $stat | cut -s -f3 -d\  >> ${stat}.txt
   done
   cat ${stat}.txt | sort -r -n > ${stat}.txt2
-  mv ${stat}.txt2 ${stat}.txtfind sonar/*.gz sonar/2009* > tmp_all_logs.txt
-FIND_LOGS="cat tmp_all_logs.txt"
-PLT_COMMON="set terminal png large size 1024,768; set grid;"
-
+  mv ${stat}.txt2 ${stat}.txt
   echo "$PLT_COMMON set output '${stat}.png'; set logscale y; \
   set xlabel '${stat} at least this many hours'; \
   set ylabel '# of users'; \
