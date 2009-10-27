@@ -55,27 +55,55 @@ echo `ls users/*.log2 | wc -l` logs retained
 # TODO: battery, AC, %laptop (used battery) vs desktop, correlate battery use w/session stats, displayTimeout settings 
 
 
-# plot runtime and duration CDFs
-echo "CDF of runtime and duration"
-for stat in total_duration total_runtime; do
-  > ${stat}.txt
-  for log in users/*.log2; do
-    guid="`echo $log | sed -e 's/\.log2//g' -e 's/users\///g'`"
-    stat_value="`tail -n 30 $log | grep $stat | cut -s -f3 -d\ `"
-    echo "$stat_value $guid" >> ${stat}.txt
-  done
-  cat ${stat}.txt | sort -r -n > ${stat}.txt2
-  mv ${stat}.txt2 ${stat}.txt
+# copy tail of each log file for vital stats written by our awk script.
+# This is done to make repeated access to tail, below, more efficient
+# Also, filter out logs less than one week long
+for log in users/*.log2; do
+  tail -n 30 $log > ${log}tail
+  total_duration="`cat ${log}tail | grep total_duration | cut -s -f3 -d\ `"
+  if [ ! "$total_duration" ]; then
+    rm ${log}tail
+  elif [ "$total_duration" -lt "604740" ]; then
+    rm ${log}tail
+  fi
 done
- echo "$PLT_COMMON set output 'duration.png'; set logscale y; set logscale x; \
-  set xlabel 'at least this many hours'; \
-  set ylabel '# of users'; \
-  plot 'total_duration.txt' using (\$1/3600):0 with lines, \
-       'total_runtime.txt' using (\$1/3600):0 with lines;" |gnuplot
+echo `ls users/*.log2tail | wc -l` users survived one week
+
+
+# plot log statistics CDFs, items joined with a + will be on same plot
+echo "CDFs of log statistics"
+for plot in \
+ total_duration+total_runtime \
+ false_sonar_cnt+false_timeout_cnt \
+ sleep_sonar_cnt+sleep_timeout_cnt \
+ sonar_cnt \
+ sleep_sonar_len+sleep_timeout_len \
+ sonar_timeout_ratio \
+ active_len+passive_len \
+ active_passive_ratio \
+; do
+  echo "$PLT_COMMON set output '$plot.png'; set logscale x; set ylabel 'fraction of users with value <= x'; plot \\" > ${plot}.plt
+  # for each line in the plot (separated by + chars)
+  for stat in `echo $plot | sed "s/+/ /g"`; do
+    > ${stat}.txt
+    # get the data for that statistic from the end of all the log files.
+    for log in users/*.log2tail; do
+      guid="`echo $log | sed -e 's/\.log2tail//g' -e 's/users\///g'`"
+      stat_value="`cat $log | grep $stat | cut -s -f3 -d\ `"
+      echo "$stat_value $guid" >> ${stat}.txt
+    done
+    cat ${stat}.txt | sort -n > ${stat}.txt2
+    mv ${stat}.txt2 ${stat}.txt
+    num_users=`cat ${stat}.txt | wc -l`
+    echo "'${stat}.txt' using (\$1):(\$0/${num_users}) with lines, \\" >> ${plot}.plt
+  done
+  echo "(0) title '' with lines" >> ${plot}.plt
+  gnuplot ${plot}.plt
+done
 
 
 # plot a histogram of model keywords
-echo "Model keyword historgram"
+echo "Model keyword histogram"
 for log in users/*.log2; do
   head $log | grep model | sed 's/^.*model //g'
 done | sort --ignore-case > models.txt
@@ -106,8 +134,6 @@ done
 echo "(0) title '' with lines" >> freq_responses.plt
 gnuplot freq_responses.plt
 
-
-# filter out logs less than one week long
 
 # TODO
 # confusion matrix: total, avg, CDF

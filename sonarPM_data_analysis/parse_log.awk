@@ -7,8 +7,10 @@ BEGIN{
   max_delta=15000000; /* ~173 days */
   last_sleep_sonar_time=0;
   last_sleep_timeout_time=0;
+  /* user states: */
   sleeping_sonar=0;
   sleeping_timeout=0;
+  passive=0;
 
   /* cumulative statistics */
   total_runtime=0;
@@ -96,13 +98,14 @@ BEGIN{
   /* sonar reading */
   }else if(( $2 ~ /[0-9]/ ) && ( $3 ~ /[0-9]/ )){
     sonar_cnt += 1;
+    passive = 1;
     /* if newly active-inactive, record sleep time */
     if( sleeping_sonar == 1 ){
       sleep_sonar_len += timestamp - last_sleep_sonar_time;
       sleeping_sonar = 0;
     }
     if( sleeping_timeout == 1 ){
-      timeout_sonar_len += timestamp - last_sleep_timeout_time;
+      sleep_timeout_len += timestamp - last_sleep_timeout_time;
       sleeping_timeout = 0;
     }
   }
@@ -118,13 +121,16 @@ END{
   printf( "%d sonar_cnt %d\n", timestamp, sonar_cnt );
   printf( "%d sleep_sonar_len %d\n", timestamp, sleep_sonar_len );
   printf( "%d sleep_timeout_len %d\n", timestamp, sleep_timeout_len );
+  if( sleep_timeout_len > 0 ){
+    printf( "%d sonar_timeout_ratio %d\n", timestamp, sleep_sonar_len/sleep_timeout_len );
+  }else{
+    printf( "%d sonar_timeout_ratio inf\n", timestamp );
+  }
   printf( "%d active_len %d\n", timestamp, active_len );
   printf( "%d passive_len %d\n", timestamp, passive_len );
-
-  sleep_sonar_len=0;
-  sleep_timeout_len=0;
-  active_len=0;
-  passive_len=0;
-
-
+  if( passive_len > 0 ){
+    printf( "%d active_passive_ratio %d\n", timestamp, active_len/passive_len );
+  }else{
+    printf( "%d active_passive_ratio inf\n", timestamp );
+  }
 }
