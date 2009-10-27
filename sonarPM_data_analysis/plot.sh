@@ -61,7 +61,7 @@ for stat in total_duration total_runtime; do
   > ${stat}.txt
   for log in users/*.log2; do
     guid="`echo $log | sed -e 's/\.log2//g' -e 's/users\///g'`"
-    stat_value="`tail $log | grep $stat | cut -s -f3 -d\ `"
+    stat_value="`tail -n 30 $log | grep $stat | cut -s -f3 -d\ `"
     echo "$stat_value $guid" >> ${stat}.txt
   done
   cat ${stat}.txt | sort -r -n > ${stat}.txt2
