@@ -37,6 +37,30 @@
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
+        "Entry"
+        {
+        "MsmKey" = "8:_2AB1CEA5D8204711A82FDDE47A621170"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_3DC414328B3E40DD8E2E45B2C1F51AE4"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_42DBB3797DCE41A5A4BA78FBBE2885B3"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_42EB89EDB73D4B548D336A76B6DB506E"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
     }
     "Configurations"
     {
@@ -214,6 +238,86 @@
             "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_2AB1CEA5D8204711A82FDDE47A621170"
+            {
+            "SourcePath" = "8:..\\portable_sonar\\README.txt"
+            "TargetName" = "8:README.txt"
+            "Tag" = "8:"
+            "Folder" = "8:_6DCE32D8F3194BF694D5C93110E8DE74"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_3DC414328B3E40DD8E2E45B2C1F51AE4"
+            {
+            "SourcePath" = "8:..\\portable_sonar\\gzip_LICENSE_GPLv2.txt"
+            "TargetName" = "8:gzip_LICENSE_GPLv2.txt"
+            "Tag" = "8:"
+            "Folder" = "8:_6DCE32D8F3194BF694D5C93110E8DE74"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_42DBB3797DCE41A5A4BA78FBBE2885B3"
+            {
+            "SourcePath" = "8:..\\portable_sonar\\portaudio_LICENSE.txt"
+            "TargetName" = "8:portaudio_LICENSE.txt"
+            "Tag" = "8:"
+            "Folder" = "8:_6DCE32D8F3194BF694D5C93110E8DE74"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_42EB89EDB73D4B548D336A76B6DB506E"
+            {
+            "SourcePath" = "8:..\\portable_sonar\\LICENSE.txt"
+            "TargetName" = "8:LICENSE.txt"
+            "Tag" = "8:"
+            "Folder" = "8:_6DCE32D8F3194BF694D5C93110E8DE74"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
         }
         "FileType"
         {
@@ -326,7 +430,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:SonarPM"
         "ProductCode" = "8:{C0BECF26-53E9-4F08-8BC0-F908AE3A5756}"
-        "PackageCode" = "8:{BFE9D582-BF45-45CE-B437-7364E5BC2963}"
+        "PackageCode" = "8:{24B5D518-5675-4B01-B66E-451C7A8C2F0A}"
         "UpgradeCode" = "8:{49807CC8-B24E-457D-B85F-ABAA7E580A2C}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:FALSE"
@@ -445,6 +549,34 @@
         }
         "Shortcut"
         {
+            "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_3DE8F3F07DFD4189950423A992B374C3"
+            {
+            "Name" = "8:LICENSE.txt"
+            "Arguments" = "8:"
+            "Description" = "8:"
+            "ShowCmd" = "3:1"
+            "IconIndex" = "3:0"
+            "Transitive" = "11:FALSE"
+            "Target" = "8:_42EB89EDB73D4B548D336A76B6DB506E"
+            "Folder" = "8:_66E3BB3D9C494D5EB7832DD381398280"
+            "WorkingFolder" = "8:_6DCE32D8F3194BF694D5C93110E8DE74"
+            "Icon" = "8:"
+            "Feature" = "8:"
+            }
+            "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_62F4C00F3509440295F6A93C0CAA597B"
+            {
+            "Name" = "8:gzip_LICENSE_GPLv2.txt"
+            "Arguments" = "8:"
+            "Description" = "8:"
+            "ShowCmd" = "3:1"
+            "IconIndex" = "3:0"
+            "Transitive" = "11:FALSE"
+            "Target" = "8:_3DC414328B3E40DD8E2E45B2C1F51AE4"
+            "Folder" = "8:_66E3BB3D9C494D5EB7832DD381398280"
+            "WorkingFolder" = "8:_6DCE32D8F3194BF694D5C93110E8DE74"
+            "Icon" = "8:"
+            "Feature" = "8:"
+            }
             "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_C681A5BA81CD44A486FE680975576A3E"
             {
             "Name" = "8:Sonar Power Manager"
@@ -457,6 +589,20 @@
             "Folder" = "8:_66E3BB3D9C494D5EB7832DD381398280"
             "WorkingFolder" = "8:_6DCE32D8F3194BF694D5C93110E8DE74"
             "Icon" = "8:_1CF59CB94DDC4A67A009D2F6A7A06B3B"
+            "Feature" = "8:"
+            }
+            "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_D7133059CAC94B658C8DA54D24B573C7"
+            {
+            "Name" = "8:portaudio_LICENSE.txt"
+            "Arguments" = "8:"
+            "Description" = "8:"
+            "ShowCmd" = "3:1"
+            "IconIndex" = "3:0"
+            "Transitive" = "11:FALSE"
+            "Target" = "8:_42DBB3797DCE41A5A4BA78FBBE2885B3"
+            "Folder" = "8:_66E3BB3D9C494D5EB7832DD381398280"
+            "WorkingFolder" = "8:_6DCE32D8F3194BF694D5C93110E8DE74"
+            "Icon" = "8:"
             "Feature" = "8:"
             }
             "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_FB3256A48DFD405092AC0471C42F224B"
