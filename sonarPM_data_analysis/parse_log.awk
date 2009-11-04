@@ -4,7 +4,7 @@ BEGIN{
   install_time=0;
   thread_start_time=0;
   new_file=0; /* set if the previous line had $2 == "file_end" */
-  max_delta=15000000; /* ~173 days */
+  max_delta=15000000; /* ~173 days, this is just before Windows logs seem to start */
   last_sleep_sonar_time=0;
   last_sleep_timeout_time=0;
   /* user states: */
@@ -23,6 +23,7 @@ BEGIN{
   active_len=0;
   passive_len=0;
   sonar_cnt=0; /* number of sonar readings taken */
+  ping_gain=0; /* from freq_response */
 }
 /./{
   /* ==================== SANITY CHECKS =======================*/
@@ -108,8 +109,11 @@ BEGIN{
       sleep_timeout_len += timestamp - last_sleep_timeout_time;
       sleeping_timeout = 0;
     }
+  /* freq response */
+  }else if( $3 ~ /response/ ){
+    split( $22, fields, /[:,]/ );
+    ping_gain = fields[2]/fields[3];
   }
-
 }
 END{
   printf( "%d total_duration %d\n", timestamp, timestamp-install_time );
@@ -133,4 +137,5 @@ END{
   }else{
     printf( "%d active_passive_ratio inf\n", timestamp );
   }
+  printf( "%d ping_gain %d\n", timestamp, ping_gain );
 }

@@ -1,5 +1,26 @@
 #!/bin/bash
 # This script does all the log file processing
+#
+# Note that using tmpfs (with many inodes for small files) speeds things up:
+# sudo /bin/mount -t tmpfs -o size=2G,nr_inodes=200k,mode=0775,noatime,nodiratime tmpfs /mnt/tmpfs
+
+
+# Parallelization functions
+# wait until fewer jobs are running than number of processors
+function queue {
+  # number of processes for parallelization
+  NP=15
+  while [ `jobs -r|wc -l` -ge $NP ]; do
+    sleep 1
+  done
+}
+# wait until all jobs have finished
+function barrier {
+  while [ `jobs -r|wc -l` -ge 1 ]; do
+    sleep 1
+  done
+}
+
 
 # download latest logs from belmont
 echo "download latest logs"
@@ -48,19 +69,25 @@ rm users/*.log2 2> /dev/null
 echo "AWK parse logs"
 for log in users/*.log; do
   awk -f parse_log.awk $log > ${log}2
-  # delete inconsistent logs
   test $? == 1 && ( rm ${log}2 )
+  # note, above, that we delete inconsistent logs
 done
 echo `ls users/*.log2 | wc -l` logs retained
 # TODO: battery, AC, %laptop (used battery) vs desktop, correlate battery use w/session stats, displayTimeout settings 
 
+# *.log2 files have been parsed by the awk script
+# they exclude inconsistent logs, have the correct absolute timestamp,
+# and they have statistics appended at the tail.
 
-# copy tail of each log file for vital stats written by our awk script.
+
+# copy head & tail of each log file for vital stats written by logger & our awk script.
 # This is done to make repeated access to tail, below, more efficient
 # Also, filter out logs less than one week long
+# *.log2tail files, are thus the stats from "good" users
 for log in users/*.log2; do
-  tail -n 30 $log > ${log}tail
-  total_duration="`cat ${log}tail | grep total_duration | cut -s -f3 -d\ `"
+  head -n 10 $log > ${log}tail
+  tail -n 30 $log >> ${log}tail
+  total_duration="`cat ${log}tail | grep -m 1 total_duration | cut -s -f3 -d\ `"
   if [ ! "$total_duration" ]; then
     rm ${log}tail
   elif [ "$total_duration" -lt "604740" ]; then
@@ -81,6 +108,8 @@ for plot in \
  sonar_timeout_ratio \
  active_len+passive_len \
  active_passive_ratio \
+ sample_rate \
+ ping_gain \
 ; do
   echo "$PLT_COMMON set output '$plot.png'; set logscale x; set ylabel 'fraction of users with value <= x'; plot \\" > ${plot}.plt
   # for each line in the plot (separated by + chars)
@@ -89,7 +118,7 @@ for plot in \
     # get the data for that statistic from the end of all the log files.
     for log in users/*.log2tail; do
       guid="`echo $log | sed -e 's/\.log2tail//g' -e 's/users\///g'`"
-      stat_value="`cat $log | grep $stat | cut -s -f3 -d\ `"
+      stat_value="`cat $log | grep -m 1 $stat | cut -s -f3 -d\ `"
       echo "$stat_value $guid" >> ${stat}.txt
     done
     cat ${stat}.txt | sort -n > ${stat}.txt2
