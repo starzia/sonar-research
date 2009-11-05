@@ -83,18 +83,23 @@ echo `ls users/*.log2 | wc -l` logs retained
 # copy head & tail of each log file for vital stats written by logger & our awk script.
 # This is done to make repeated access to tail, below, more efficient
 # Also, filter out logs less than one week long
+# and those with little total_runtime
+# and those with low ping gain
 # *.log2tail files, are thus the stats from "good" users
 for log in users/*.log2; do
   head -n 10 $log > ${log}tail
   tail -n 30 $log >> ${log}tail
   total_duration="`cat ${log}tail | grep -m 1 total_duration | cut -s -f3 -d\ `"
-  if [ ! "$total_duration" ]; then
-    rm ${log}tail
-  elif [ "$total_duration" -lt "604740" ]; then
+  total_runtime="`cat ${log}tail | grep -m 1 total_runtime | cut -s -f3 -d\ `"
+  ping_gain="`cat ${log}tail | grep -m 1 ping_gain | cut -s -f3 -d\ `"
+  if [ ! "$total_duration" ] || [ "$total_duration" -lt "604740" ] \
+    || [ ! "$total_runtime" ] || [ "$total_runtime" -lt "3600" ] \
+    || [ ! "$ping_gain" ] || [ `echo "$ping_gain < 10.0"|bc` ] \
+  ; then
     rm ${log}tail
   fi
 done
-echo `ls users/*.log2tail | wc -l` users survived one week
+echo `ls users/*.log2tail | wc -l` good users
 
 
 # plot log statistics CDFs, items joined with a + will be on same plot

@@ -5,12 +5,15 @@ BEGIN{
   thread_start_time=0;
   new_file=0; /* set if the previous line had $2 == "file_end" */
   max_delta=15000000; /* ~173 days, this is just before Windows logs seem to start */
+  /* start times for various states: */
   last_sleep_sonar_time=0;
   last_sleep_timeout_time=0;
+  last_sonar_time=0;
+  state_start_time=0;
   /* user states: */
   sleeping_sonar=0;
   sleeping_timeout=0;
-  passive=0;
+  active=1; /*initially active*/
 
   /* cumulative statistics */
   total_runtime=0;
@@ -52,6 +55,8 @@ BEGIN{
       /* record initial time */
       install_time = $1;
       thread_start_time = $1; /* this shouldn't be necessary, but is */
+      state_start_time = $1;
+      last_sonar_time = $1;
     }
     if( $1 < timestamp ){
        /* we just went backward in time! */
@@ -70,10 +75,47 @@ BEGIN{
   }
 
   /* ==================== PARSE OPCODE =======================*/
-  if(( $2 ~ /begin/ ) || ( $2 ~ /resume/ )){  thread_start_time = timestamp; }
-  else if(( $2 ~ /end/ ) || ( $2 ~ /suspend/ )){
+  /* sonar reading */
+  if(( $2 ~ /[0-9]/ ) && ( $3 ~ /[0-9]/ )){
+    sonar_cnt += 1;
+    /* if newly inactive */
+    if( active == 1 ){
+      active_len += timestamp - state_start_time;
+      active = 0;
+      state_start_time = timestamp;
+    /* if newly active-inactive */
+    }else if( timestamp - last_sonar_time > 2 ){
+      /* two sessions are recorded */
+      passive_len += last_sonar_time - state_start_time;
+      active_len += timestamp - last_sonar_time;
+      active = 0;
+      state_start_time = timestamp;
+    }
+    /* if newly sleeping-active-inactive, record sleep time */
+    if( sleeping_sonar == 1 ){
+      sleep_sonar_len += timestamp - last_sleep_sonar_time;
+      sleeping_sonar = 0;
+    }
+    if( sleeping_timeout == 1 ){
+      sleep_timeout_len += timestamp - last_sleep_timeout_time;
+      sleeping_timeout = 0;
+    }
+    last_sonar_time = timestamp;
+  /* active, note that there msgs are omitted in version 0.7 so we use hack above to estimate activity */
+  }else if( $2 ~ /active/ ){
+    passive_len += timestamp - state_start_time;
+    active = 1;
+    state_start_time = timestamp;
+  }else if(( $2 ~ /begin/ ) || ( $2 ~ /resume/ )){
+    thread_start_time = timestamp; 
+    state_start_time = timestamp;
+    last_sonar_time = timestamp;
+  }else if(( $2 ~ /end/ ) || ( $2 ~ /suspend/ )){
     total_runtime += timestamp - thread_start_time;
-    thread_start_time = timestamp; /* just to be safe */ 
+    /* just to be safe: */
+    thread_start_time = 0;  
+    state_start_time = 0;
+    last_sonar_time = 0;
   }else if( $2 ~ /false/ ){
     if( $3 ~ /sleep/ ){
       false_sonar_cnt += 1;
@@ -96,23 +138,12 @@ BEGIN{
         sleeping_timeout = 1;
       }
     }
-  /* sonar reading */
-  }else if(( $2 ~ /[0-9]/ ) && ( $3 ~ /[0-9]/ )){
-    sonar_cnt += 1;
-    passive = 1;
-    /* if newly active-inactive, record sleep time */
-    if( sleeping_sonar == 1 ){
-      sleep_sonar_len += timestamp - last_sleep_sonar_time;
-      sleeping_sonar = 0;
-    }
-    if( sleeping_timeout == 1 ){
-      sleep_timeout_len += timestamp - last_sleep_timeout_time;
-      sleeping_timeout = 0;
-    }
   /* freq response */
-  }else if( $3 ~ /response/ ){
+  }else if( $2 ~ /response/ ){
     split( $22, fields, /[:,]/ );
-    ping_gain = fields[2]/fields[3];
+    if( fields[3] != 0 ){
+      ping_gain = fields[2]/fields[3];
+    }
   }
 }
 END{
@@ -126,16 +157,16 @@ END{
   printf( "%d sleep_sonar_len %d\n", timestamp, sleep_sonar_len );
   printf( "%d sleep_timeout_len %d\n", timestamp, sleep_timeout_len );
   if( sleep_timeout_len > 0 ){
-    printf( "%d sonar_timeout_ratio %d\n", timestamp, sleep_sonar_len/sleep_timeout_len );
+    printf( "%d sonar_timeout_ratio %f\n", timestamp, sleep_sonar_len/sleep_timeout_len );
   }else{
     printf( "%d sonar_timeout_ratio inf\n", timestamp );
   }
   printf( "%d active_len %d\n", timestamp, active_len );
   printf( "%d passive_len %d\n", timestamp, passive_len );
   if( passive_len > 0 ){
-    printf( "%d active_passive_ratio %d\n", timestamp, active_len/passive_len );
+    printf( "%d active_passive_ratio %f\n", timestamp, active_len/passive_len );
   }else{
     printf( "%d active_passive_ratio inf\n", timestamp );
   }
-  printf( "%d ping_gain %d\n", timestamp, ping_gain );
+  printf( "%d ping_gain %f\n", timestamp, ping_gain );
 }
