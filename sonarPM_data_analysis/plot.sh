@@ -86,19 +86,29 @@ echo `ls users/*.log2 | wc -l` logs retained
 # and those with little total_runtime
 # and those with low ping gain
 # *.log2tail files, are thus the stats from "good" users
+rm -f users/*.log2tail
 for log in users/*.log2; do
-  head -n 10 $log > ${log}tail
-  tail -n 30 $log >> ${log}tail
-  total_duration="`cat ${log}tail | grep -m 1 total_duration | cut -s -f3 -d\ `"
-  total_runtime="`cat ${log}tail | grep -m 1 total_runtime | cut -s -f3 -d\ `"
-  ping_gain="`cat ${log}tail | grep -m 1 ping_gain | cut -s -f3 -d\ `"
-  if [ ! "$total_duration" ] || [ "$total_duration" -lt "604740" ] \
-    || [ ! "$total_runtime" ] || [ "$total_runtime" -lt "3600" ] \
-    || [ ! "$ping_gain" ] || [ `echo "$ping_gain < 10.0"|bc` ] \
-  ; then
-    rm ${log}tail
+  head -n 10 $log > ${log}t
+  tail -n 30 $log >> ${log}t
+  total_duration="`cat ${log}t | grep -a -m 1 total_duration | cut -s -f3 -d\ `"
+  total_runtime="`cat ${log}t | grep -a -m 1 total_runtime | cut -s -f3 -d\ `"
+  ping_gain="`cat ${log}t | grep -a -m 1 ping_gain | cut -s -f3 -d\ `"
+  if [ "$total_duration" ]; then
+    if [ "$total_duration" -ge "604740" ]; then
+      if [ "$total_runtime" ]; then
+        if [ "$total_runtime" -ge "3600" ]; then
+          if [ "$ping_gain" ]; then
+            if [ "$(echo "$ping_gain >= 10.0"|bc)" -gt "0" ]; then
+              # keep this log
+              mv ${log}t ${log}tail
+            fi
+          fi
+        fi
+      fi
+    fi
   fi
 done
+rm -f users/*.log2t
 echo `ls users/*.log2tail | wc -l` good users
 
 
@@ -115,6 +125,7 @@ for plot in \
  active_passive_ratio \
  sample_rate \
  ping_gain \
+ displayTimeout \
 ; do
   echo "$PLT_COMMON set output '$plot.png'; set logscale x; set ylabel 'fraction of users with value <= x'; plot \\" > ${plot}.plt
   # for each line in the plot (separated by + chars)
@@ -123,7 +134,7 @@ for plot in \
     # get the data for that statistic from the end of all the log files.
     for log in users/*.log2tail; do
       guid="`echo $log | sed -e 's/\.log2tail//g' -e 's/users\///g'`"
-      stat_value="`cat $log | grep -m 1 $stat | cut -s -f3 -d\ `"
+      stat_value="`cat $log | grep -a -m 1 $stat | cut -s -f3 -d\ `"
       echo "$stat_value $guid" >> ${stat}.txt
     done
     cat ${stat}.txt | sort -n > ${stat}.txt2
@@ -139,7 +150,7 @@ done
 # plot a histogram of model keywords
 echo "Model keyword histogram"
 for log in users/*.log2; do
-  head $log | grep model | sed 's/^.*model //g'
+  head $log | grep -a -m 1 model | sed 's/^.*model //g'
 done | sort --ignore-case > models.txt
 # remove DOS newlines
 cat models.txt | sed "s/\r//g" >  models2.txt
@@ -151,7 +162,7 @@ echo "$PLT_COMMON set output 'models.png'; set logscale y; unset xtics; plot 'mo
 # plot CDF of freq response (show every fifth frequency)
 echo "CDF of freq response"
 for log in users/*.log2; do
-  head $log | grep response | sed 's/^.*response //g'
+  head $log | grep -a -m 1 response | sed 's/^.*response //g'
 done > freq_responses.txt
 total=`cat freq_responses.txt|wc -l`
 

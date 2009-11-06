@@ -2,12 +2,12 @@ BEGIN{
   /* state variables */
   timestamp=0;
   install_time=0;
-  thread_start_time=0;
   new_file=0; /* set if the previous line had $2 == "file_end" */
   max_delta=15000000; /* ~173 days, this is just before Windows logs seem to start */
   /* start times for various states: */
   last_sleep_sonar_time=0;
   last_sleep_timeout_time=0;
+  thread_start_time=0;
   last_sonar_time=0;
   state_start_time=0;
   /* user states: */
@@ -27,7 +27,42 @@ BEGIN{
   passive_len=0;
   sonar_cnt=0; /* number of sonar readings taken */
   ping_gain=0; /* from freq_response */
+  displayTimeout=0;
 }
+
+function became_active( timestamp ){
+  if( state_start_time == 0 ){ exit( 1 ) };
+  passive_len += timestamp - state_start_time;
+  active = 1;
+  state_start_time = timestamp;
+}
+
+function became_passive( timestamp ){
+  if( state_start_time == 0 ){ exit( 1 ) };
+  active_len += timestamp - state_start_time;
+  active = 0;
+  state_start_time = timestamp;
+}
+
+function session_begin(){
+  active = 1;
+  state_start_time = timestamp;
+  last_sonar_time = timestamp * 2; /* choose an arbitrary large value so that comparison condition below is not met until a real past sonar time is available */
+  thread_start_time = timestamp;
+  sleeping_sonar = 0;
+  sleeping_timeout = 0;
+}
+
+function session_end(){
+  /* simply ignore duplicate ends, as these are common */
+  if( thread_start_time == 0 ){ return };
+  total_runtime += timestamp - thread_start_time;
+  /* resetting these allows us to find instances with missing "begin" */
+  thread_start_time = 0;  
+  state_start_time = 0;
+  last_sonar_time = 0;
+}
+
 /./{
   /* ==================== SANITY CHECKS =======================*/
   /* test that first line is sane */
@@ -51,45 +86,44 @@ BEGIN{
   /* ==================== FIX TIMESTAMP =======================*/
   if( $1 > max_delta ){
     /* absolute timestamp */
-    if( install_time == 0 ){
-      /* record initial time */
-      install_time = $1;
-      thread_start_time = $1; /* this shouldn't be necessary, but is */
-      state_start_time = $1;
-      last_sonar_time = $1;
-    }
     if( $1 < timestamp ){
        /* we just went backward in time! */
        exit( 1 ); /* exit with error code */
     }
     timestamp = $1;
-    print $0;	
+    print $0;
+    if( install_time == 0 ){
+      /* record initial time */
+      install_time = $1;
+      /* this shouldn't be necessary, but is */
+      session_begin();
+    }	
   }else{
     /* relative timestamp, must rewrite line */
     timestamp = timestamp + $1;
-    printf( "%d ", timestamp );
+    printf( "%d", timestamp );
     for(i=2;i<=NF;i++){
-      printf( "%s ", $i );
+      printf( " %s", $i );
     }
-    printf( "\t%s\n", $1 );
+    printf("\n");
   }
 
   /* ==================== PARSE OPCODE =======================*/
   /* sonar reading */
   if(( $2 ~ /[0-9]/ ) && ( $3 ~ /[0-9]/ )){
     sonar_cnt += 1;
+    /* allow implicit "begin" */
+    if( last_sonar_time == 0 ){
+      session_begin();
+    }
     /* if newly inactive */
     if( active == 1 ){
-      active_len += timestamp - state_start_time;
-      active = 0;
-      state_start_time = timestamp;
+      became_passive( timestamp );
     /* if newly active-inactive */
     }else if( timestamp - last_sonar_time > 2 ){
       /* two sessions are recorded */
-      passive_len += last_sonar_time - state_start_time;
-      active_len += timestamp - last_sonar_time;
-      active = 0;
-      state_start_time = timestamp;
+      became_active( last_sonar_time );
+      became_passive( timestamp );
     }
     /* if newly sleeping-active-inactive, record sleep time */
     if( sleeping_sonar == 1 ){
@@ -103,19 +137,11 @@ BEGIN{
     last_sonar_time = timestamp;
   /* active, note that there msgs are omitted in version 0.7 so we use hack above to estimate activity */
   }else if( $2 ~ /active/ ){
-    passive_len += timestamp - state_start_time;
-    active = 1;
-    state_start_time = timestamp;
+    became_active( timestamp );
   }else if(( $2 ~ /begin/ ) || ( $2 ~ /resume/ )){
-    thread_start_time = timestamp; 
-    state_start_time = timestamp;
-    last_sonar_time = timestamp;
-  }else if(( $2 ~ /end/ ) || ( $2 ~ /suspend/ )){
-    total_runtime += timestamp - thread_start_time;
-    /* just to be safe: */
-    thread_start_time = 0;  
-    state_start_time = 0;
-    last_sonar_time = 0;
+    session_begin();
+  }else if(( $2 ~ /end/ ) || ( $2 ~ /suspend/ ) || ( $2 ~ /complete/ )){
+    session_end();
   }else if( $2 ~ /false/ ){
     if( $3 ~ /sleep/ ){
       false_sonar_cnt += 1;
@@ -138,6 +164,8 @@ BEGIN{
         sleeping_timeout = 1;
       }
     }
+  }else if( $2 ~ /displayTimeout/ ){
+    displayTimeout = $3;
   /* freq response */
   }else if( $2 ~ /response/ ){
     split( $22, fields, /[:,]/ );
@@ -147,6 +175,7 @@ BEGIN{
   }
 }
 END{
+  session_end();
   printf( "%d total_duration %d\n", timestamp, timestamp-install_time );
   printf( "%d total_runtime %d\n", timestamp, total_runtime );
   printf( "%d false_sonar_cnt %d\n", timestamp, false_sonar_cnt );
@@ -169,4 +198,5 @@ END{
     printf( "%d active_passive_ratio inf\n", timestamp );
   }
   printf( "%d ping_gain %f\n", timestamp, ping_gain );
+  printf( "%d displayTimeout %d\n", timestamp, displayTimeout );
 }
