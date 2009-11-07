@@ -93,8 +93,8 @@ for log in users/*.log2; do
   total_duration="`cat ${log}t | grep -a -m 1 total_duration | cut -s -f3 -d\ `"
   total_runtime="`cat ${log}t | grep -a -m 1 total_runtime | cut -s -f3 -d\ `"
   ping_gain="`cat ${log}t | grep -a -m 1 ping_gain | cut -s -f3 -d\ `"
-  if [ "$total_duration" ]; then
-    if [ "$total_duration" -ge "604740" ]; then
+#  if [ "$total_duration" ]; then
+#    if [ "$total_duration" -ge "604740" ]; then
       if [ "$total_runtime" ]; then
         if [ "$total_runtime" -ge "3600" ]; then
           if [ "$ping_gain" ]; then
@@ -105,8 +105,8 @@ for log in users/*.log2; do
           fi
         fi
       fi
-    fi
-  fi
+#    fi
+#  fi
 done
 rm -f users/*.log2t
 echo `ls users/*.log2tail | wc -l` good users
@@ -116,13 +116,12 @@ echo `ls users/*.log2tail | wc -l` good users
 echo "CDFs of log statistics"
 for plot in \
  total_duration+total_runtime \
- false_sonar_cnt+false_timeout_cnt \
- sleep_sonar_cnt+sleep_timeout_cnt \
- sonar_cnt \
+ sonar_cnt+sleep_sonar_cnt+sleep_timeout_cnt+false_sonar_cnt+false_timeout_cnt \
  sleep_sonar_len+sleep_timeout_len \
  sonar_timeout_ratio \
- active_len+passive_len \
+ active_len+passive_len+absent_len \
  active_passive_ratio \
+ present_absent_ratio \
  sample_rate \
  ping_gain \
  displayTimeout \
@@ -140,7 +139,7 @@ for plot in \
     cat ${stat}.txt | sort -n > ${stat}.txt2
     mv ${stat}.txt2 ${stat}.txt
     num_users=`cat ${stat}.txt | wc -l`
-    echo "'${stat}.txt' using (\$1):(\$0/${num_users}) with lines, \\" >> ${plot}.plt
+    echo "'${stat}.txt' using (\$1):((\$0+1)/${num_users}) with lines, \\" >> ${plot}.plt
   done
   echo "(0) title '' with lines" >> ${plot}.plt
   gnuplot ${plot}.plt
@@ -174,7 +173,7 @@ for freq in `seq 0 5 35`; do
          silence=\$(3*$freq+3); \
          if(silence==0){print 0;}else{printf( \"%f\n\", noise/silence );}}" | \
    sort -n -k 1 > freq_${freq}.txt
-  echo "'freq_${freq}.txt' using 1:(\$0/$total) title '$freq_string Hz' with lines, \\" >> freq_responses.plt
+  echo "'freq_${freq}.txt' using 1:((\$0+1)/$total) title '$freq_string Hz' with lines, \\" >> freq_responses.plt
 done
 echo "(0) title '' with lines" >> freq_responses.plt
 gnuplot freq_responses.plt

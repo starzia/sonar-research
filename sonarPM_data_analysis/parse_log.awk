@@ -1,9 +1,13 @@
-BEGIN{ 
+BEGIN{
+  /* constants */
+  ACTIVE=0;
+  PASSIVE=1;
+  ABSENT=2;
+  max_delta=15000000; /* ~173 days, this is just before Windows logs seem to start */
   /* state variables */
   timestamp=0;
   install_time=0;
   new_file=0; /* set if the previous line had $2 == "file_end" */
-  max_delta=15000000; /* ~173 days, this is just before Windows logs seem to start */
   /* start times for various states: */
   last_sleep_sonar_time=0;
   last_sleep_timeout_time=0;
@@ -13,7 +17,7 @@ BEGIN{
   /* user states: */
   sleeping_sonar=0;
   sleeping_timeout=0;
-  active=1; /*initially active*/
+  user_state=ACTIVE; /* 0=active, 1=passive, 2=absent */
 
   /* cumulative statistics */
   total_runtime=0;
@@ -25,27 +29,27 @@ BEGIN{
   sleep_timeout_len=0;
   active_len=0;
   passive_len=0;
+  absent_len=0;
   sonar_cnt=0; /* number of sonar readings taken */
   ping_gain=0; /* from freq_response */
   displayTimeout=0;
 }
 
-function became_active( timestamp ){
+function change_user_state( new_state, timestamp ){
   if( state_start_time == 0 ){ exit( 1 ) };
-  passive_len += timestamp - state_start_time;
-  active = 1;
-  state_start_time = timestamp;
-}
-
-function became_passive( timestamp ){
-  if( state_start_time == 0 ){ exit( 1 ) };
-  active_len += timestamp - state_start_time;
-  active = 0;
+  if( user_state == ACTIVE ){
+    active_len += timestamp - state_start_time;
+  }else if( user_state == PASSIVE ){
+    passive_len += timestamp - state_start_time;
+  }else{
+    absent_len += timestamp - state_start_time;
+  }
+  user_state = new_state;
   state_start_time = timestamp;
 }
 
 function session_begin(){
-  active = 1;
+  user_state = ACTIVE;
   state_start_time = timestamp;
   last_sonar_time = timestamp * 2; /* choose an arbitrary large value so that comparison condition below is not met until a real past sonar time is available */
   thread_start_time = timestamp;
@@ -56,6 +60,7 @@ function session_begin(){
 function session_end(){
   /* simply ignore duplicate ends, as these are common */
   if( thread_start_time == 0 ){ return };
+  change_user_state( ABSENT, timestamp ); /* record last state */
   total_runtime += timestamp - thread_start_time;
   /* resetting these allows us to find instances with missing "begin" */
   thread_start_time = 0;  
@@ -117,13 +122,13 @@ function session_end(){
       session_begin();
     }
     /* if newly inactive */
-    if( active == 1 ){
-      became_passive( timestamp );
+    if( user_state == ACTIVE ){
+      change_user_state( PASSIVE, timestamp );
     /* if newly active-inactive */
     }else if( timestamp - last_sonar_time > 2 ){
       /* two sessions are recorded */
-      became_active( last_sonar_time );
-      became_passive( timestamp );
+      change_user_state( ACTIVE, last_sonar_time );
+      change_user_state( PASSIVE, timestamp );
     }
     /* if newly sleeping-active-inactive, record sleep time */
     if( sleeping_sonar == 1 ){
@@ -137,7 +142,7 @@ function session_end(){
     last_sonar_time = timestamp;
   /* active, note that there msgs are omitted in version 0.7 so we use hack above to estimate activity */
   }else if( $2 ~ /active/ ){
-    became_active( timestamp );
+    change_user_state( ACTIVE, timestamp );
   }else if(( $2 ~ /begin/ ) || ( $2 ~ /resume/ )){
     session_begin();
   }else if(( $2 ~ /end/ ) || ( $2 ~ /suspend/ ) || ( $2 ~ /complete/ )){
@@ -152,6 +157,7 @@ function session_end(){
       }
     }
   }else if( $2 ~ /sleep/ ){
+    change_user_state( ABSENT, timestamp );
     if( $3 ~ /sonar/ ){
       sleep_sonar_cnt += 1;
       last_sleep_sonar_time = timestamp;
@@ -192,10 +198,16 @@ END{
   }
   printf( "%d active_len %d\n", timestamp, active_len );
   printf( "%d passive_len %d\n", timestamp, passive_len );
+  printf( "%d absent_len %d\n", timestamp, absent_len );
   if( passive_len > 0 ){
     printf( "%d active_passive_ratio %f\n", timestamp, active_len/passive_len );
   }else{
-    printf( "%d active_passive_ratio inf\n", timestamp );
+    printf( "%d active_passive_ratio 0\n", timestamp );
+  }
+  if( absent_len > 0 ){
+    printf( "%d present_absent_ratio %f\n", timestamp, (active_len+passive_len)/absent_len );
+  }else{
+    printf( "%d present_absent_ratio 0\n", timestamp );
   }
   printf( "%d ping_gain %f\n", timestamp, ping_gain );
   printf( "%d displayTimeout %d\n", timestamp, displayTimeout );
