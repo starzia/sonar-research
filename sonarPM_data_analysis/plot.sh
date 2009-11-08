@@ -20,20 +20,54 @@ function barrier {
     sleep 1
   done
 }
+# a single lock, implemented as a directory
+function lock {
+  while ! mkdir .lock 2> /dev/null; do
+    sleep 0.01
+  done
+}
+function unlock {
+  rmdir .lock 2> /dev/null
+}
 
 
-# download latest logs from belmont
-echo "download latest logs"
-sudo rsync -r --delete root@belmont.cs.northwestern.edu:/home/sonar .
-sudo chown -R `whoami`:`whoami` sonar
-chmod -R +r sonar
-# delete empty log files
-for i in `find sonar -size 0`; do rm -f $i; done
+if [ "$1" == "--download" ]; then
+  # download latest logs from belmont
+  echo "download latest logs"
+  sudo rsync -r --delete root@belmont.cs.northwestern.edu:/home/sonar .
+  sudo chown -R `whoami`:`whoami` sonar
+  chmod -R +r sonar
+  # delete empty log files
+  for i in `find sonar -size 0`; do rm -f $i; done
+fi
 
 find sonar/*.gz sonar/2009* > tmp_all_logs.txt
 FIND_LOGS="cat tmp_all_logs.txt"
 PLT_COMMON="set terminal png large size 1024,768; set grid;"
 
+if [ "$1" == "--download" ]; then
+  # concatenate log files into one file for each user
+  echo "concatenate log files"
+  mkdir users 2> /dev/null # store a single concatenated log for each user
+  rm users/* 2> /dev/null
+  mkdir logs 2> /dev/null # store each log fragment decompressed
+  # concatenate logs in correct order
+  for guid in `$FIND_LOGS | grep "\.0\.log\.gz" | sed -e 's/\.0\.log\.gz//g' -e 's/sonar.*\///g'`; do
+    > users/${guid}.log
+    for log in `$FIND_LOGS | grep $guid | sort -n --field-separator=. --key=2,2`; do
+      filename=`echo $log | sed -e 's/\//-/g'`
+      # check that we didn't decompress this log in a previous script run
+      if [ ! -f logs/$filename ]; then
+        gzip -t $log 2> /dev/null # verify that user's file upload succeeded
+        test $? == 0 && (zcat -q $log > logs/$filename; dos2unix -q logs/$filename)
+      fi
+      if [ -f logs/$filename ]; then
+        cat logs/$filename >> users/${guid}.log
+      fi
+      echo "0 file_end $log" >> users/${guid}.log
+    done
+  done
+fi
 
 # plot user retention (log indices)
 echo "plot user retention"
@@ -47,38 +81,20 @@ set ylabel '# of users'; \
 plot 'log_indices.txt' using 1:2 with lines;" |gnuplot
 
 
-# concatenate log files into one file for each user
-echo "concatenate log files"
-mkdir users 2> /dev/null # store a single concatenated log for each user
-rm users/* 2> /dev/null
-mkdir logs 2> /dev/null # store each log fragment decompressed
-# concatenate logs in correct order
-for guid in `$FIND_LOGS | grep "\.0\.log\.gz" | sed -e 's/\.0\.log\.gz//g' -e 's/sonar.*\///g'`; do
-  > users/${guid}.log
-  for log in `$FIND_LOGS | grep $guid | sort -n --field-separator=. --key=2,2`; do
-    filename=`echo $log | sed -e 's/\//-/g'`
-    # check that we didn't decompress this log in a previous script run
-    if [ ! -f logs/$filename ]; then
-      gzip -t $log 2> /dev/null # verify that user's file upload succeeded
-      test $? == 0 && (zcat -q $log > logs/$filename; dos2unix -q logs/$filename)
-    fi
-    if [ -f logs/$filename ]; then
-      cat logs/$filename >> users/${guid}.log
-    fi
-    echo "0 file_end $log" >> users/${guid}.log
-  done
-done
-
-
 # replace timestamp time deltas w/ absolute time and 
 # append some basic stats to end of log
+# also reject bad logs
 rm users/*.log2 2> /dev/null
 echo "AWK parse logs"
 for log in users/*.log; do
-  awk -f parse_log.awk $log > ${log}2
-  test $? == 1 && ( rm ${log}2 )
-  # note, above, that we delete inconsistent logs
+  queue
+  # spawn awk as a background process for parallelization
+  awk -f parse_log.awk $log > ${log}2 &
+  ## delete inconsistent logs
+  #test $? == 1 && ( rm ${log}2 )
+  # note, we take care of the above deletion later
 done
+barrier
 echo `ls users/*.log2 | wc -l` logs retained
 # TODO: battery, AC, %laptop (used battery) vs desktop, correlate battery use w/session stats, displayTimeout settings 
 
@@ -96,27 +112,9 @@ echo `ls users/*.log2 | wc -l` logs retained
 echo "filter out bad logs"
 rm -f users/*.log2tail
 for log in users/*.log2; do
-  head -n 10 $log > ${log}t
-  tail -n 30 $log >> ${log}t
-  total_duration="`cat ${log}t | grep -a -m 1 total_duration | cut -s -f3 -d\ `"
-  total_runtime="`cat ${log}t | grep -a -m 1 total_runtime | cut -s -f3 -d\ `"
-  ping_gain="`cat ${log}t | grep -a -m 1 ping_gain | cut -s -f3 -d\ `"
-#  if [ "$total_duration" ]; then
-#    if [ "$total_duration" -ge "604740" ]; then
-      if [ "$total_runtime" ]; then
-        if [ "$total_runtime" -ge "3600" ]; then
-#          if [ "$ping_gain" ]; then
-#            if [ "$(echo "$ping_gain >= 3.0"|bc)" -gt "0" ]; then
-              # keep this log
-              mv ${log}t ${log}tail
-#            fi
-#          fi
-        fi
-      fi
-#    fi
-#  fi
+  head -n 10 $log > ${log}tail
+  tail -n 30 $log >> ${log}tail
 done
-rm -f users/*.log2t
 echo `ls users/*.log2tail | wc -l` good users
 
 
@@ -139,18 +137,25 @@ rm *.stat.txt
 # parse statistic values for all users
 # create single file all_stats.txt with a column for each stat and 
 # also individual files for each stat ${stat}.stat.txt
-for log in users/*.log2tail; do
+for log in guid users/*.log2tail; do
   guid="`echo $log | sed -e 's/\.log2tail//g' -e 's/users\///g'`"
-  echo -n "${guid} " >> all_stats.txt
+  echo -n "${guid} " > all_stats_$guid.txt
   for plot in ${plot_list}; do
     for stat in `echo $plot | sed "s/+/ /g"`; do
-      # get the data for that statistic from the end of all the log files.
-      stat_value="`cat $log | grep -a -m 1 " ${stat}" | cut -s -f3 -d\ `"
-      echo "${stat_value} ${guid}" >> ${stat}.stat.txt
-      echo -n "${stat_value} " >> all_stats.txt
+      if [ "$guid" == "guid" ]; then
+      # header row
+        echo -n "${stat} " >> all_stats_$guid.txt
+      else
+        # get the data for that statistic from the end of all the log files.
+        stat_value="`cat $log | grep -a -m 1 " ${stat}" | cut -s -f3 -d\ `"
+        echo "${stat_value} ${guid}" >> ${stat}.stat.txt
+        echo -n "${stat_value} " >> all_stats_$guid.txt
+      fi
     done
   done
-  echo >> all_stats.txt
+  echo >> all_stats_$guid.txt
+  cat all_stats_$guid.txt >> all_stats.txt
+  rm all_stats_$guid.txt
 done
 
 # set up all plt files and plot them

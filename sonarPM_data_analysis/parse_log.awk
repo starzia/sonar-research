@@ -107,6 +107,10 @@ function session_end(){
        /* we just went backward in time! */
        exit( 1 ); /* exit with error code */
     }
+    if( timestamp != 0 && $1 > 2*timestamp ){
+       /* we just went way forward in time! */
+       exit( 1 ); /* exit with error code */
+    }
     timestamp = $1;
     print $0;
     if( install_time == 0 ){
@@ -139,7 +143,13 @@ function session_end(){
     /* if newly active-inactive */
     }else if( timestamp - last_sonar_time > 3 ){
       /* two sessions are recorded */
-      change_user_state( ACTIVE, last_sonar_time );
+      if( sleeping_sonar == 1 ){
+        /* if sonar was shut off, then we have no real record of when user became active.  Just approximate by current time.  First active interval after sleep is therefore lost. */
+        change_user_state( ACTIVE, timestamp );
+      }else{
+        /* if sonar was still running, then last active interval started when sonar stopped */
+        change_user_state( ACTIVE, last_sonar_time );
+      }
       change_user_state( PASSIVE, timestamp );
     }
     last_sonar_time = timestamp;
@@ -163,7 +173,6 @@ function session_end(){
     if( $3 ~ /sonar/ ){
       change_user_state( ABSENT, timestamp );
       sleep_sonar_cnt += 1;
-      print timestamp, " SLEEP_SONAR"
       last_sleep_sonar_time = timestamp;
       sleeping_sonar = 1;
     }else if( $3 ~ /timeout/ ){
@@ -171,7 +180,6 @@ function session_end(){
       if( timestamp - last_sleep_timeout_claim_time > 10 ){
         change_user_state( ABSENT, timestamp );
         sleep_timeout_cnt += 1;
-        print timestamp, " SLEEP_TIMEOUT"
         last_sleep_timeout_time = timestamp;
         sleeping_timeout = 1;
       }
@@ -191,6 +199,13 @@ function session_end(){
 }
 END{
   session_end();
+
+  /* reject unfit logs */
+  if( total_runtime < 3600 ){
+    exit( 1 );
+  }
+
+  /* print log stats */
   printf( "%d total_duration %d\n", timestamp, timestamp-install_time );
   printf( "%d total_runtime %d\n", timestamp, total_runtime );
   printf( "%d false_sonar_cnt %d\n", timestamp, false_sonar_cnt );
