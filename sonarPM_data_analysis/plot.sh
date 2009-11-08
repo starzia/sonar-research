@@ -49,17 +49,24 @@ plot 'log_indices.txt' using 1:2 with lines;" |gnuplot
 
 # concatenate log files into one file for each user
 echo "concatenate log files"
-mkdir users 2> /dev/null
+mkdir users 2> /dev/null # store a single concatenated log for each user
 rm users/* 2> /dev/null
+mkdir logs 2> /dev/null # store each log fragment decompressed
 # concatenate logs in correct order
 for guid in `$FIND_LOGS | grep "\.0\.log\.gz" | sed -e 's/\.0\.log\.gz//g' -e 's/sonar.*\///g'`; do
   > users/${guid}.log
   for log in `$FIND_LOGS | grep $guid | sort -n --field-separator=. --key=2,2`; do
-    gzip -t $log 2> /dev/null # verify that user's file upload succeeded
-    test $? == 0 && (zcat -q $log >> users/${guid}.log)
+    filename=`echo $log | sed -e 's/\//-/g'`
+    # check that we didn't decompress this log in a previous script run
+    if [ ! -f logs/$filename ]; then
+      gzip -t $log 2> /dev/null # verify that user's file upload succeeded
+      test $? == 0 && (zcat -q $log > logs/$filename; dos2unix -q logs/$filename)
+    fi
+    if [ -f logs/$filename ]; then
+      cat logs/$filename >> users/${guid}.log
+    fi
     echo "0 file_end $log" >> users/${guid}.log
   done
-  dos2unix -q users/${guid}.log
 done
 
 
@@ -86,6 +93,7 @@ echo `ls users/*.log2 | wc -l` logs retained
 # and those with little total_runtime
 # and those with low ping gain
 # *.log2tail files, are thus the stats from "good" users
+echo "filter out bad logs"
 rm -f users/*.log2tail
 for log in users/*.log2; do
   head -n 10 $log > ${log}t
@@ -97,12 +105,12 @@ for log in users/*.log2; do
 #    if [ "$total_duration" -ge "604740" ]; then
       if [ "$total_runtime" ]; then
         if [ "$total_runtime" -ge "3600" ]; then
-          if [ "$ping_gain" ]; then
-            if [ "$(echo "$ping_gain >= 10.0"|bc)" -gt "0" ]; then
+#          if [ "$ping_gain" ]; then
+#            if [ "$(echo "$ping_gain >= 3.0"|bc)" -gt "0" ]; then
               # keep this log
               mv ${log}t ${log}tail
-            fi
-          fi
+#            fi
+#          fi
         fi
       fi
 #    fi
@@ -114,7 +122,7 @@ echo `ls users/*.log2tail | wc -l` good users
 
 # plot log statistics CDFs, items joined with a + will be on same plot
 echo "CDFs of log statistics"
-for plot in \
+plot_list="\
  total_duration+total_runtime \
  sonar_cnt+sleep_sonar_cnt+sleep_timeout_cnt+false_sonar_cnt+false_timeout_cnt \
  sleep_sonar_len+sleep_timeout_len \
@@ -125,21 +133,36 @@ for plot in \
  sample_rate \
  ping_gain \
  displayTimeout \
-; do
+";
+> all_stats.txt
+rm *.stat.txt
+# parse statistic values for all users
+# create single file all_stats.txt with a column for each stat and 
+# also individual files for each stat ${stat}.stat.txt
+for log in users/*.log2tail; do
+  guid="`echo $log | sed -e 's/\.log2tail//g' -e 's/users\///g'`"
+  echo -n "${guid} " >> all_stats.txt
+  for plot in ${plot_list}; do
+    for stat in `echo $plot | sed "s/+/ /g"`; do
+      # get the data for that statistic from the end of all the log files.
+      stat_value="`cat $log | grep -a -m 1 " ${stat}" | cut -s -f3 -d\ `"
+      echo "${stat_value} ${guid}" >> ${stat}.stat.txt
+      echo -n "${stat_value} " >> all_stats.txt
+    done
+  done
+  echo >> all_stats.txt
+done
+
+# set up all plt files and plot them
+num_users=`cat all_stats.txt | wc -l`
+for plot in ${plot_list}; do
+  > ${plot}.plt
   echo "$PLT_COMMON set output '$plot.png'; set logscale x; set ylabel 'fraction of users with value <= x'; plot \\" > ${plot}.plt
   # for each line in the plot (separated by + chars)
   for stat in `echo $plot | sed "s/+/ /g"`; do
-    > ${stat}.txt
-    # get the data for that statistic from the end of all the log files.
-    for log in users/*.log2tail; do
-      guid="`echo $log | sed -e 's/\.log2tail//g' -e 's/users\///g'`"
-      stat_value="`cat $log | grep -a -m 1 $stat | cut -s -f3 -d\ `"
-      echo "$stat_value $guid" >> ${stat}.txt
-    done
-    cat ${stat}.txt | sort -n > ${stat}.txt2
-    mv ${stat}.txt2 ${stat}.txt
-    num_users=`cat ${stat}.txt | wc -l`
-    echo "'${stat}.txt' using (\$1):((\$0+1)/${num_users}) with lines, \\" >> ${plot}.plt
+    cat ${stat}.stat.txt | sort -n > ${stat}.stat.txt2
+    mv ${stat}.stat.txt2 ${stat}.stat.txt
+    echo "'${stat}.stat.txt' using (\$1):((\$0+1)/${num_users}) with linespoints, \\" >> ${plot}.plt
   done
   echo "(0) title '' with lines" >> ${plot}.plt
   gnuplot ${plot}.plt

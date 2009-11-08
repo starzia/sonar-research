@@ -11,6 +11,7 @@ BEGIN{
   /* start times for various states: */
   last_sleep_sonar_time=0;
   last_sleep_timeout_time=0;
+  last_sleep_timeout_claim_time=0;
   thread_start_time=0;
   last_sonar_time=0;
   state_start_time=0;
@@ -39,6 +40,7 @@ function change_user_state( new_state, timestamp ){
   if( state_start_time == 0 ){ exit( 1 ) };
   if( user_state == ACTIVE ){
     active_len += timestamp - state_start_time;
+    
   }else if( user_state == PASSIVE ){
     passive_len += timestamp - state_start_time;
   }else{
@@ -46,6 +48,16 @@ function change_user_state( new_state, timestamp ){
   }
   user_state = new_state;
   state_start_time = timestamp;
+
+  /* if previously sleeping, state change means waking, so record sleep time */
+  if( sleeping_sonar == 1 ){
+    sleep_sonar_len += timestamp - last_sleep_sonar_time;
+    sleeping_sonar = 0;
+  }
+  if( sleeping_timeout == 1 ){
+    sleep_timeout_len += timestamp - last_sleep_timeout_time;
+    sleeping_timeout = 0;
+  }
 }
 
 function session_begin(){
@@ -115,7 +127,7 @@ function session_end(){
 
   /* ==================== PARSE OPCODE =======================*/
   /* sonar reading */
-  if(( $2 ~ /[0-9]/ ) && ( $3 ~ /[0-9]/ )){
+  if(( $2 ~ /[0-9]\.[0-9].*/ ) && ( $3 ~ /[0-9]\.[0-9].*/ )){
     sonar_cnt += 1;
     /* allow implicit "begin" */
     if( last_sonar_time == 0 ){
@@ -125,19 +137,10 @@ function session_end(){
     if( user_state == ACTIVE ){
       change_user_state( PASSIVE, timestamp );
     /* if newly active-inactive */
-    }else if( timestamp - last_sonar_time > 2 ){
+    }else if( timestamp - last_sonar_time > 3 ){
       /* two sessions are recorded */
       change_user_state( ACTIVE, last_sonar_time );
       change_user_state( PASSIVE, timestamp );
-    }
-    /* if newly sleeping-active-inactive, record sleep time */
-    if( sleeping_sonar == 1 ){
-      sleep_sonar_len += timestamp - last_sleep_sonar_time;
-      sleeping_sonar = 0;
-    }
-    if( sleeping_timeout == 1 ){
-      sleep_timeout_len += timestamp - last_sleep_timeout_time;
-      sleeping_timeout = 0;
     }
     last_sonar_time = timestamp;
   /* active, note that there msgs are omitted in version 0.7 so we use hack above to estimate activity */
@@ -157,26 +160,32 @@ function session_end(){
       }
     }
   }else if( $2 ~ /sleep/ ){
-    change_user_state( ABSENT, timestamp );
     if( $3 ~ /sonar/ ){
+      change_user_state( ABSENT, timestamp );
       sleep_sonar_cnt += 1;
+      print timestamp, " SLEEP_SONAR"
       last_sleep_sonar_time = timestamp;
       sleeping_sonar = 1;
     }else if( $3 ~ /timeout/ ){
       /* must be the first message in the buggy repetitive sleep series */
-      if( timestamp - last_sleep_timeout_time > 10 ){
+      if( timestamp - last_sleep_timeout_claim_time > 10 ){
+        change_user_state( ABSENT, timestamp );
         sleep_timeout_cnt += 1;
+        print timestamp, " SLEEP_TIMEOUT"
         last_sleep_timeout_time = timestamp;
         sleeping_timeout = 1;
       }
+      last_sleep_timeout_claim_time = timestamp;
     }
   }else if( $2 ~ /displayTimeout/ ){
     displayTimeout = $3;
   /* freq response */
   }else if( $2 ~ /response/ ){
+    /* we don't have the freq reponse at 22khz, so we avg the two straddling values */
     split( $22, fields, /[:,]/ );
-    if( fields[3] != 0 ){
-      ping_gain = fields[2]/fields[3];
+    split( $23, fields2, /[:,]/ );
+    if( fields[3] != 0 && fields2[3] != 0){
+      ping_gain = ( (fields[2]/fields[3]) + (fields2[2]/fields2[3]) )/2;
     }
   }
 }
@@ -202,12 +211,12 @@ END{
   if( passive_len > 0 ){
     printf( "%d active_passive_ratio %f\n", timestamp, active_len/passive_len );
   }else{
-    printf( "%d active_passive_ratio 0\n", timestamp );
+    printf( "%d active_passive_ratio inf\n", timestamp );
   }
   if( absent_len > 0 ){
     printf( "%d present_absent_ratio %f\n", timestamp, (active_len+passive_len)/absent_len );
   }else{
-    printf( "%d present_absent_ratio 0\n", timestamp );
+    printf( "%d present_absent_ratio inf\n", timestamp );
   }
   printf( "%d ping_gain %f\n", timestamp, ping_gain );
   printf( "%d displayTimeout %d\n", timestamp, displayTimeout );
