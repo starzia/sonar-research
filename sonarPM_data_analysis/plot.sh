@@ -43,7 +43,7 @@ fi
 
 find sonar/*.gz sonar/2009* > tmp_all_logs.txt
 FIND_LOGS="cat tmp_all_logs.txt"
-PLT_COMMON="set terminal png large size 1024,768; set grid;"
+PLT_COMMON="set terminal png large size 1024,768; set grid; set key out vert center top; "
 
 if [ "$1" == "--download" ]; then
   # concatenate log files into one file for each user
@@ -114,6 +114,14 @@ rm -f users/*.log2tail
 for log in users/*.log2; do
   head -n 10 $log > ${log}tail
   tail -n 30 $log >> ${log}tail
+  total_runtime="`cat ${log}tail | grep -a -m 1 total_runtime | cut -s -f3 -d\ `"
+  if [ ! $total_runtime ]; then
+    rm ${log}tail
+  fi
+done
+# delete blacklist entries
+for guid in `cat blacklist.txt | cut -s -f1 -d\ `; do 
+  rm -f users/${guid}.log2tail
 done
 echo `ls users/*.log2tail | wc -l` good users
 
@@ -121,7 +129,7 @@ echo `ls users/*.log2tail | wc -l` good users
 # plot log statistics CDFs, items joined with a + will be on same plot
 echo "CDFs of log statistics"
 plot_list="\
- total_duration+total_runtime \
+ total_duration+total_runtime+log_lines \
  sonar_cnt+sleep_sonar_cnt+sleep_timeout_cnt+false_sonar_cnt+false_timeout_cnt \
  sleep_sonar_len+sleep_timeout_len \
  sonar_timeout_ratio \
@@ -133,7 +141,7 @@ plot_list="\
  displayTimeout \
 ";
 > all_stats.txt
-rm *.stat.txt
+rm *.stat.txt 2> /dev/null
 # parse statistic values for all users
 # create single file all_stats.txt with a column for each stat and 
 # also individual files for each stat ${stat}.stat.txt
@@ -148,6 +156,9 @@ for log in guid users/*.log2tail; do
       else
         # get the data for that statistic from the end of all the log files.
         stat_value="`cat $log | grep -a -m 1 " ${stat}" | cut -s -f3 -d\ `"
+        if [ "$stat_value" == ""  ]; then 
+          stat_value="null"
+        fi
         echo "${stat_value} ${guid}" >> ${stat}.stat.txt
         echo -n "${stat_value} " >> all_stats_$guid.txt
       fi
@@ -196,10 +207,11 @@ total=`cat freq_responses.txt|wc -l`
 echo "$PLT_COMMON set output 'freq_responses.png'; set logscale x; set xrange [0.01:100000]; set key right outside; plot \\" > freq_responses.plt
 for freq in `seq 0 5 35`; do
   freq_string=`echo "(15000*1.02^($freq))" | bc`
+  # below, some records have a single value for the ratio, ignore these (NF<108)
   cat freq_responses.txt | sed "s/[:,]/ /g" | \
    awk "{noise=\$(3*$freq+2); \
          silence=\$(3*$freq+3); \
-         if(silence==0){print 0;}else{printf( \"%f\n\", noise/silence );}}" | \
+         if(silence==0 || NF < 108){print 0;}else{printf( \"%f\n\", noise/silence );}}" | \
    sort -n -k 1 > freq_${freq}.txt
   echo "'freq_${freq}.txt' using 1:((\$0+1)/$total) title '$freq_string Hz' with lines, \\" >> freq_responses.plt
 done

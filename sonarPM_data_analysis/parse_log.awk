@@ -3,9 +3,10 @@ BEGIN{
   ACTIVE=0;
   PASSIVE=1;
   ABSENT=2;
-  max_delta=15000000; /* ~173 days, this is just before Windows logs seem to start */
+  max_delta=10000000; /* ~116 days, this is just before Windows logs seem to start */
   /* state variables */
   timestamp=0;
+  prev_timestamp=0;
   install_time=0;
   new_file=0; /* set if the previous line had $2 == "file_end" */
   /* start times for various states: */
@@ -38,9 +39,9 @@ BEGIN{
 
 function change_user_state( new_state, timestamp ){
   if( state_start_time == 0 ){ exit( 1 ) };
+  print timestamp, "STATE", new_state;
   if( user_state == ACTIVE ){
     active_len += timestamp - state_start_time;
-    
   }else if( user_state == PASSIVE ){
     passive_len += timestamp - state_start_time;
   }else{
@@ -55,13 +56,18 @@ function change_user_state( new_state, timestamp ){
     sleeping_sonar = 0;
   }
   if( sleeping_timeout == 1 ){
-    sleep_timeout_len += timestamp - last_sleep_timeout_time;
-    sleeping_timeout = 0;
-  }
+    /* this guard is needed because function can be called for past time */
+    if( last_sleep_timeout_time < timestamp ){
+      sleep_timeout_len += timestamp - last_sleep_timeout_time;
+      print "SLEEP_TIMEOUT_LEN", sleep_timeout_len;
+      sleeping_timeout = 0;
+    }
+  } 
 }
 
 function session_begin(){
-  user_state = ACTIVE;
+  print timestamp, "BEGIN";
+  user_state = PASSIVE;
   state_start_time = timestamp;
   last_sonar_time = timestamp * 2; /* choose an arbitrary large value so that comparison condition below is not met until a real past sonar time is available */
   thread_start_time = timestamp;
@@ -69,7 +75,8 @@ function session_begin(){
   sleeping_timeout = 0;
 }
 
-function session_end(){
+function session_end( timestamp ){
+  print timestamp, "END";
   /* simply ignore duplicate ends, as these are common */
   if( thread_start_time == 0 ){ return };
   change_user_state( ABSENT, timestamp ); /* record last state */
@@ -96,7 +103,7 @@ function session_end(){
     }
     new_file = 0;
   }
-  if( $2 ~ /file_end/ ){
+  if( $2 == "file_end" ){
     new_file = 1;
   }
 
@@ -154,28 +161,41 @@ function session_end(){
     }
     last_sonar_time = timestamp;
   /* active, note that there msgs are omitted in version 0.7 so we use hack above to estimate activity */
-  }else if( $2 ~ /active/ ){
+  }else if( $2 == "active" ){
     change_user_state( ACTIVE, timestamp );
-  }else if(( $2 ~ /begin/ ) || ( $2 ~ /resume/ )){
+  }else if(( $2 == "begin" ) || ( $2 == "resume" )){
     session_begin();
-  }else if(( $2 ~ /end/ ) || ( $2 ~ /suspend/ ) || ( $2 ~ /complete/ )){
-    session_end();
-  }else if( $2 ~ /false/ ){
-    if( $3 ~ /sleep/ ){
+  }else if(( $2 == "end" ) || ( $2 == "complete" )){
+    session_end( timestamp );
+  }else if( $2 == "suspend" ){ 
+    /* suspend message seems to be logged after resume, so use previous timestamp */
+    session_end( prev_timestamp );
+  }else if( $2 == "false" ){
+    if( $3 == "sleep" ){ /* sonar sleep */
       false_sonar_cnt += 1;
-    }else if( $3 ~ /timeout/ ){
+      sleep_sonar_cnt -= 1;
+      /* don't record the last small segment as absent but passive */
+      user_state = PASSIVE;
+      sleeping_sonar = 0;
+      change_user_state( ACTIVE, timestamp )
+    }else if( $3 == "timeout" ){
       /* correct for repetitive sleep timeout bug */
       if( timestamp - last_sleep_timeout_time < 5 ){
         false_timeout_cnt += 1;
+        sleep_timeout_cnt -= 1;
+        user_state = PASSIVE;
+        sleeping_timeout = 0;
+        change_user_state( ACTIVE, timestamp )
       }
     }
-  }else if( $2 ~ /sleep/ ){
-    if( $3 ~ /sonar/ ){
+    change_user_state( ACTIVE, timestamp );
+  }else if( $2 == "sleep" ){
+    if( $3 == "sonar" ){
       change_user_state( ABSENT, timestamp );
       sleep_sonar_cnt += 1;
       last_sleep_sonar_time = timestamp;
       sleeping_sonar = 1;
-    }else if( $3 ~ /timeout/ ){
+    }else if( $3 == "timeout" ){
       /* must be the first message in the buggy repetitive sleep series */
       if( timestamp - last_sleep_timeout_claim_time > 10 ){
         change_user_state( ABSENT, timestamp );
@@ -185,10 +205,10 @@ function session_end(){
       }
       last_sleep_timeout_claim_time = timestamp;
     }
-  }else if( $2 ~ /displayTimeout/ ){
+  }else if( $2 == "displayTimeout" ){
     displayTimeout = $3;
   /* freq response */
-  }else if( $2 ~ /response/ ){
+  }else if( $2 == "response" ){
     /* we don't have the freq reponse at 22khz, so we avg the two straddling values */
     split( $22, fields, /[:,]/ );
     split( $23, fields2, /[:,]/ );
@@ -196,13 +216,18 @@ function session_end(){
       ping_gain = ( (fields[2]/fields[3]) + (fields2[2]/fields2[3]) )/2;
     }
   }
+  prev_timestamp = timestamp;
 }
 END{
-  session_end();
+  session_end( timestamp );
 
   /* reject unfit logs */
   if( total_runtime < 3600 ){
-    exit( 1 );
+    exit(1);
+  }
+  /* reject short logs */ 
+  if( NR < 100 ){
+    exit(1);
   }
 
   /* print log stats */
@@ -235,4 +260,5 @@ END{
   }
   printf( "%d ping_gain %f\n", timestamp, ping_gain );
   printf( "%d displayTimeout %d\n", timestamp, displayTimeout );
+  printf( "%d log_lines %d\n", timestamp, NR );
 }
