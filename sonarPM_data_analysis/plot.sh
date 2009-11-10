@@ -9,7 +9,7 @@
 # wait until fewer jobs are running than number of processors
 function queue {
   # number of processes for parallelization
-  NP=15
+  NP=8
   while [ `jobs -r|wc -l` -ge $NP ]; do
     sleep 1
   done
@@ -43,7 +43,7 @@ fi
 
 find sonar/*.gz sonar/2009* > tmp_all_logs.txt
 FIND_LOGS="cat tmp_all_logs.txt"
-PLT_COMMON="set terminal png large size 1024,768; set grid; set key out vert center top; "
+PLT_COMMON="set terminal png large size 1024,768; set grid; "
 
 if [ "$1" == "--download" ]; then
   # concatenate log files into one file for each user
@@ -131,7 +131,7 @@ echo "CDFs of log statistics"
 plot_list="\
  total_duration+total_runtime+log_lines \
  sonar_cnt+sleep_sonar_cnt+sleep_timeout_cnt+false_sonar_cnt+false_timeout_cnt \
- sleep_sonar_len+sleep_timeout_len \
+ sleep_sonar_len+sleep_timeout_len+sleep_total_len \
  sonar_timeout_ratio \
  active_len+passive_len+absent_len \
  active_passive_ratio \
@@ -178,7 +178,7 @@ for plot in ${plot_list}; do
   for stat in `echo $plot | sed "s/+/ /g"`; do
     cat ${stat}.stat.txt | sort -n > ${stat}.stat.txt2
     mv ${stat}.stat.txt2 ${stat}.stat.txt
-    echo "'${stat}.stat.txt' using (\$1):((\$0+1)/${num_users}) with linespoints, \\" >> ${plot}.plt
+    echo "'${stat}.stat.txt' using (\$1):((\$0+1)/${num_users}) with lines, \\" >> ${plot}.plt
   done
   echo "(0) title '' with lines" >> ${plot}.plt
   gnuplot ${plot}.plt

@@ -248,6 +248,8 @@ END{
   printf( "%d active_len %d\n", timestamp, active_len );
   printf( "%d passive_len %d\n", timestamp, passive_len );
   printf( "%d absent_len %d\n", timestamp, absent_len );
+  /* same variable by a different name */
+  printf( "%d sleep_total_len %d\n", timestamp, absent_len );
   if( passive_len > 0 ){
     printf( "%d active_passive_ratio %f\n", timestamp, active_len/passive_len );
   }else{
