@@ -16,6 +16,7 @@ BEGIN{
   thread_start_time=0;
   last_sonar_time=0;
   state_start_time=0;
+  last_active_time=0;
   /* user states: */
   sleeping_sonar=0;
   sleeping_timeout=0;
@@ -42,6 +43,7 @@ function change_user_state( new_state, timestamp ){
   print timestamp, "STATE", new_state;
   if( user_state == ACTIVE ){
     active_len += timestamp - state_start_time;
+    last_active_time = timestamp;
   }else if( user_state == PASSIVE ){
     passive_len += timestamp - state_start_time;
   }else{
@@ -53,13 +55,14 @@ function change_user_state( new_state, timestamp ){
   /* if previously sleeping, state change means waking, so record sleep time */
   if( sleeping_sonar == 1 ){
     sleep_sonar_len += timestamp - last_sleep_sonar_time;
+    print timestamp, "SLEPT_SONAR", timestamp - last_sleep_sonar_time;
     sleeping_sonar = 0;
   }
   if( sleeping_timeout == 1 ){
     /* this guard is needed because function can be called for past time */
     if( last_sleep_timeout_time < timestamp ){
       sleep_timeout_len += timestamp - last_sleep_timeout_time;
-      print "SLEEP_TIMEOUT_LEN", sleep_timeout_len;
+      print timestamp, "SLEPT_TIMEOUT", timestamp - last_sleep_timeout_time;
       sleeping_timeout = 0;
     }
   } 
@@ -70,6 +73,7 @@ function session_begin(){
   user_state = PASSIVE;
   state_start_time = timestamp;
   last_sonar_time = timestamp * 2; /* choose an arbitrary large value so that comparison condition below is not met until a real past sonar time is available */
+  last_active_time = timestamp * 2;
   thread_start_time = timestamp;
   sleeping_sonar = 0;
   sleeping_timeout = 0;
@@ -136,10 +140,26 @@ function session_end( timestamp ){
     printf("\n");
   }
 
+  /* BUG: sometimes timeout doesn't activate when it should */
+  /* so we manually activate it here */
+  if( (user_state != ACTIVE) && !sleeping_timeout && (displayTimeout > 0) \
+       && (timestamp - last_active_time > displayTimeout) ){
+    sleep_time = last_active_time + displayTimeout;
+    if( user_state != ABSENT ){ /* we may already be sleeping due to other policy */
+      change_user_state( ABSENT, sleep_time );
+    }
+    sleep_timeout_cnt += 1;
+    last_sleep_timeout_time = sleep_time;
+    sleeping_timeout = 1;
+  }
+
   /* ==================== PARSE OPCODE =======================*/
   /* sonar reading */
   if(( $2 ~ /[0-9]\.[0-9].*/ ) && ( $3 ~ /[0-9]\.[0-9].*/ )){
-    sonar_cnt += 1;
+    if( user_state != ABSENT ){
+      /* only record sonar readings that were necessary */
+      sonar_cnt += 1;
+    }
     /* allow implicit "begin" */
     if( last_sonar_time == 0 ){
       session_begin();
@@ -161,7 +181,7 @@ function session_end( timestamp ){
     }
     last_sonar_time = timestamp;
   /* active, note that there msgs are omitted in version 0.7 so we use hack above to estimate activity */
-  }else if( $2 == "active" ){
+  }else if(( $2 == "active" ) || ( $2 == "wakeup" ) || ( $2 == "threshold" )){
     change_user_state( ACTIVE, timestamp );
   }else if(( $2 == "begin" ) || ( $2 == "resume" )){
     session_begin();
@@ -191,14 +211,18 @@ function session_end( timestamp ){
     change_user_state( ACTIVE, timestamp );
   }else if( $2 == "sleep" ){
     if( $3 == "sonar" ){
-      change_user_state( ABSENT, timestamp );
+      if( user_state != ABSENT ){ /* we may already be sleeping due to other policy */
+        change_user_state( ABSENT, timestamp );
+      }
       sleep_sonar_cnt += 1;
       last_sleep_sonar_time = timestamp;
       sleeping_sonar = 1;
     }else if( $3 == "timeout" ){
       /* must be the first message in the buggy repetitive sleep series */
       if( timestamp - last_sleep_timeout_claim_time > 10 ){
-        change_user_state( ABSENT, timestamp );
+        if( user_state != ABSENT ){ /* we may already be sleeping due to other policy */
+          change_user_state( ABSENT, timestamp );
+        }
         sleep_timeout_cnt += 1;
         last_sleep_timeout_time = timestamp;
         sleeping_timeout = 1;
