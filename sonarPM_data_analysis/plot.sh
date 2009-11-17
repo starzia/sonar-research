@@ -43,7 +43,7 @@ fi
 
 find sonar/*.gz sonar/2009* > tmp_all_logs.txt
 FIND_LOGS="cat tmp_all_logs.txt"
-PLT_COMMON="set terminal png large size 1024,768; set grid; "
+PLT_COMMON="set terminal png large size 1280,1024; set grid; "
 
 if [ "$1" == "--download" ]; then
   # concatenate log files into one file for each user
