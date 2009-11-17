@@ -12,7 +12,6 @@ BEGIN{
   /* start times for various states: */
   last_sleep_sonar_time=0;
   last_sleep_timeout_time=0;
-  last_sleep_timeout_claim_time=0;
   thread_start_time=0;
   last_sonar_time=0;
   state_start_time=0;
@@ -36,10 +35,19 @@ BEGIN{
   sonar_cnt=0; /* number of sonar readings taken */
   ping_gain=0; /* from freq_response */
   displayTimeout=0;
+
+  abnormal_termination=0;
+}
+
+# stops processing input file and sets variable so that END section is not run
+function fail(){
+  abnormal_termination=1;
+  exit(1);
 }
 
 function change_user_state( new_state, timestamp ){
-  if( state_start_time == 0 ){ exit( 1 ) };
+  if( state_start_time == 0 ){ fail() };
+  if( state_start_time > timestamp ){ fail() };
   print timestamp, "STATE", new_state;
   if( user_state == ACTIVE ){
     active_len += timestamp - state_start_time;
@@ -47,6 +55,7 @@ function change_user_state( new_state, timestamp ){
   }else if( user_state == PASSIVE ){
     passive_len += timestamp - state_start_time;
   }else{
+    print timestamp, "RECORD_ABSENT", timestamp - state_start_time;
     absent_len += timestamp - state_start_time;
   }
   user_state = new_state;
@@ -65,7 +74,26 @@ function change_user_state( new_state, timestamp ){
       print timestamp, "SLEPT_TIMEOUT", timestamp - last_sleep_timeout_time;
       sleeping_timeout = 0;
     }
-  } 
+  }
+  #print timestamp, "SO_FAR", absent_len, sleep_sonar_len, sleep_timeout_len;
+}
+
+function sleep_sonar( timestamp ){
+  if( user_state != ABSENT ){ /* we may already be sleeping due to other policy */
+    change_user_state( ABSENT, timestamp );
+  }
+  sleep_sonar_cnt += 1;
+  last_sleep_sonar_time = timestamp;
+  sleeping_sonar = 1;
+}
+
+function sleep_timeout( timestamp ){
+  if( user_state != ABSENT ){ /* we may already be sleeping due to other policy */
+    change_user_state( ABSENT, timestamp );
+  }
+  sleep_timeout_cnt += 1;
+  last_sleep_timeout_time = timestamp;
+  sleeping_timeout = 1;
 }
 
 function session_begin(){
@@ -96,14 +124,14 @@ function session_end( timestamp ){
   /* test that first line is sane */
   if( NR == 1 ){
     if( $2 !~ /model/ ){
-      exit( 1 ); /* exit with error code */
+      fail();
     }
   }
   /* test that first line in each log file is sane */
   if( new_file == 1 ){
     /* should have absolute, not relative, timestamp */
     if( $1 < max_delta ){
-      exit( 1 );
+      fail();
     }
     new_file = 0;
   }
@@ -116,11 +144,11 @@ function session_end( timestamp ){
     /* absolute timestamp */
     if( $1 < timestamp ){
        /* we just went backward in time! */
-       exit( 1 ); /* exit with error code */
+       fail();
     }
     if( timestamp != 0 && $1 > 2*timestamp ){
        /* we just went way forward in time! */
-       exit( 1 ); /* exit with error code */
+       fail();
     }
     timestamp = $1;
     print $0;
@@ -140,24 +168,23 @@ function session_end( timestamp ){
     printf("\n");
   }
 
-  /* BUG: sometimes timeout doesn't activate when it should */
-  /* so we manually activate it here */
-  if( (user_state != ACTIVE) && !sleeping_timeout && (displayTimeout > 0) \
+  # bug: sometimes timeout doesn't activate when it should 
+  # so we manually activate it here.  We only simulate a timeout if
+  # sonar already put display to sleep b/c we must be sure user is absent.
+  if( sleeping_sonar && !sleeping_timeout && (displayTimeout > 0) \
        && (timestamp - last_active_time > displayTimeout) ){
-    sleep_time = last_active_time + displayTimeout;
-    if( user_state != ABSENT ){ /* we may already be sleeping due to other policy */
-      change_user_state( ABSENT, sleep_time );
+    if( last_sleep_sonar_time > last_active_time + displayTimeout ){
+      sleep_timeout( last_sleep_sonar_time );
+    }else{
+      sleep_timeout( last_active_time + displayTimeout );
     }
-    sleep_timeout_cnt += 1;
-    last_sleep_timeout_time = sleep_time;
-    sleeping_timeout = 1;
   }
 
   /* ==================== PARSE OPCODE =======================*/
   /* sonar reading */
   if(( $2 ~ /[0-9]\.[0-9].*/ ) && ( $3 ~ /[0-9]\.[0-9].*/ )){
     if( user_state != ABSENT ){
-      /* only record sonar readings that were necessary */
+      /* only count sonar readings that were necessary */
       sonar_cnt += 1;
     }
     /* allow implicit "begin" */
@@ -171,8 +198,8 @@ function session_end( timestamp ){
     }else if( timestamp - last_sonar_time > 3 ){
       /* two sessions are recorded */
       if( sleeping_sonar == 1 ){
-        /* if sonar was shut off, then we have no real record of when user became active.  Just approximate by current time.  First active interval after sleep is therefore lost. */
-        change_user_state( ACTIVE, timestamp );
+        /* if sonar was shut off, then we have no real record of when user became active.  Approximate by just before current time.  First active interval after sleep is therefore lost. */
+        change_user_state( ACTIVE, timestamp-1 );
       }else{
         /* if sonar was still running, then last active interval started when sonar stopped */
         change_user_state( ACTIVE, last_sonar_time );
@@ -211,23 +238,12 @@ function session_end( timestamp ){
     change_user_state( ACTIVE, timestamp );
   }else if( $2 == "sleep" ){
     if( $3 == "sonar" ){
-      if( user_state != ABSENT ){ /* we may already be sleeping due to other policy */
-        change_user_state( ABSENT, timestamp );
-      }
-      sleep_sonar_cnt += 1;
-      last_sleep_sonar_time = timestamp;
-      sleeping_sonar = 1;
+      sleep_sonar( timestamp );
     }else if( $3 == "timeout" ){
       /* must be the first message in the buggy repetitive sleep series */
-      if( timestamp - last_sleep_timeout_claim_time > 10 ){
-        if( user_state != ABSENT ){ /* we may already be sleeping due to other policy */
-          change_user_state( ABSENT, timestamp );
-        }
-        sleep_timeout_cnt += 1;
-        last_sleep_timeout_time = timestamp;
-        sleeping_timeout = 1;
+      if( !sleeping_timeout ){
+        sleep_timeout( timestamp );
       }
-      last_sleep_timeout_claim_time = timestamp;
     }
   }else if( $2 == "displayTimeout" ){
     displayTimeout = $3;
@@ -244,6 +260,10 @@ function session_end( timestamp ){
 }
 END{
   session_end( timestamp );
+
+  if( abnormal_termination ){
+    exit(1);
+  }
 
   /* reject unfit logs */
   if( total_runtime < 3600 ){
