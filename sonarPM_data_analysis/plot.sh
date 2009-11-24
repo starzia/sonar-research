@@ -128,7 +128,7 @@ echo `ls users/*.log2tail | wc -l` good users
 
 # plot log statistics CDFs, items joined with a + will be on same plot
 echo "CDFs of log statistics"
-plot_list="\
+old_plot_list="\
  total_duration+total_runtime+log_lines \
  sonar_cnt+sleep_sonar_cnt+sleep_timeout_cnt+false_sonar_cnt+false_timeout_cnt \
  sleep_sonar_len+sleep_timeout_len+sleep_total_len \
@@ -139,6 +139,19 @@ plot_list="\
  sample_rate \
  ping_gain \
  displayTimeout \
+";
+plot_list="\
+ total_duration+total_runtime \
+ sleep_sonar_cnt+sleep_timeout_cnt+false_sonar_cnt+false_timeout_cnt \
+ sleep_sonar_len+sleep_timeout_len+sleep_total_len \
+ active_passive_ratio \
+ present_absent_ratio \
+ ping_gain \
+ displayTimeout \
+ false_sonar_rate+false_timeout_rate \
+ extra_sleep_rate \
+ extra_sleep_fraction \
+ extra_sleep_per_reading \
 ";
 > all_stats.txt
 rm *.stat.txt 2> /dev/null

@@ -273,12 +273,19 @@ END{
   if( NR < 100 ){
     exit(1);
   }
+  /* reject logs without more than one sonar sleep (indicates sonar didn't work) */ 
+  if( sleep_sonar_cnt < 2 ){
+    exit(1);
+  }
 
   /* print log stats */
+  present_len = active_len + passive_len;
   printf( "%d total_duration %d\n", timestamp, timestamp-install_time );
   printf( "%d total_runtime %d\n", timestamp, total_runtime );
   printf( "%d false_sonar_cnt %d\n", timestamp, false_sonar_cnt );
   printf( "%d false_timeout_cnt %d\n", timestamp, false_timeout_cnt );
+  printf( "%d false_sonar_rate %f\n", timestamp, false_sonar_cnt/(passive_len/3600) );
+  printf( "%d false_timeout_rate %f\n", timestamp, false_timeout_cnt/(passive_len/3600) );
   printf( "%d sleep_sonar_cnt %d\n", timestamp, sleep_sonar_cnt );
   printf( "%d sleep_timeout_cnt %d\n", timestamp, sleep_timeout_cnt );
   printf( "%d sonar_cnt %d\n", timestamp, sonar_cnt );
@@ -293,18 +300,23 @@ END{
   printf( "%d passive_len %d\n", timestamp, passive_len );
   printf( "%d absent_len %d\n", timestamp, absent_len );
   /* same variable by a different name */
-  printf( "%d sleep_total_len %d\n", timestamp, absent_len );
+  sleep_total_len = absent_len;
+  printf( "%d sleep_total_len %d\n", timestamp, sleep_total_len );
   if( passive_len > 0 ){
     printf( "%d active_passive_ratio %f\n", timestamp, active_len/passive_len );
   }else{
     printf( "%d active_passive_ratio inf\n", timestamp );
   }
   if( absent_len > 0 ){
-    printf( "%d present_absent_ratio %f\n", timestamp, (active_len+passive_len)/absent_len );
+    printf( "%d present_absent_ratio %f\n", timestamp, present_len/absent_len );
   }else{
     printf( "%d present_absent_ratio inf\n", timestamp );
   }
   printf( "%d ping_gain %f\n", timestamp, ping_gain );
   printf( "%d displayTimeout %d\n", timestamp, displayTimeout );
   printf( "%d log_lines %d\n", timestamp, NR );
+  extra_sleep_sonar = sleep_total_len - sleep_timeout_len;
+  printf( "%d extra_sleep_rate %f\n", timestamp, extra_sleep_sonar/(total_runtime/3600) );
+  printf( "%d extra_sleep_fraction %f\n", timestamp, extra_sleep_sonar/sleep_total_len );
+  printf( "%d extra_sleep_per_reading %f\n", timestamp, extra_sleep_sonar/sonar_cnt );
 }
