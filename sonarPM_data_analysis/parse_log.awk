@@ -316,7 +316,7 @@ END{
   printf( "%d displayTimeout %d\n", timestamp, displayTimeout );
   printf( "%d log_lines %d\n", timestamp, NR );
   extra_sleep_sonar = sleep_total_len - sleep_timeout_len;
-  printf( "%d extra_sleep_rate %f\n", timestamp, extra_sleep_sonar/(total_runtime/3600) );
+  printf( "%d extra_sleep_rate %f\n", timestamp, extra_sleep_sonar/total_runtime );
   printf( "%d extra_sleep_fraction %f\n", timestamp, extra_sleep_sonar/sleep_total_len );
   printf( "%d extra_sleep_per_reading %f\n", timestamp, extra_sleep_sonar/sonar_cnt );
 }
