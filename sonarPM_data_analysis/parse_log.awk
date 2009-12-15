@@ -319,4 +319,11 @@ END{
   printf( "%d extra_sleep_rate %f\n", timestamp, extra_sleep_sonar/total_runtime );
   printf( "%d extra_sleep_fraction %f\n", timestamp, extra_sleep_sonar/sleep_total_len );
   printf( "%d extra_sleep_per_reading %f\n", timestamp, extra_sleep_sonar/sonar_cnt );
+
+  # constants for energy savings calculation
+  DISPLAY_E_FRAC = 0.3; # fraction of system energy due to LCD
+  SONAR_OVERHEAD_FRAC = 0.05; # fraction of system energy added when sonar active.
+  SONAR_READING_TIME = 1; # time to measure and calculate each sonar reading
+  printf( "%d projected_energy_savings %f\n", timestamp, 
+   ( extra_sleep_sonar*DISPLAY_E_FRAC - sonar_cnt*SONAR_OVERHEAD_FRAC*SONAR_READING_TIME )/total_runtime );
 }
