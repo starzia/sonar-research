@@ -96,11 +96,11 @@ for log in users/*.log; do
 done
 barrier
 echo `ls users/*.log2 | wc -l` logs retained
-# TODO: battery, AC, %laptop (used battery) vs desktop, correlate battery use w/session stats, displayTimeout settings 
+# TODO: battery, AC, %laptop (used battery) vs desktop, correlate battery use w/session stats
 
 # *.log2 files have been parsed by the awk script
-# they exclude inconsistent logs, have the correct absolute timestamp,
-# and they have statistics appended at the tail.
+# they have the correct absolute timestamp,
+# and they have statistics appended at the tail if the log is "good".
 
 
 # copy head & tail of each log file for vital stats written by logger & our awk script.
@@ -152,6 +152,7 @@ plot_list="\
  extra_sleep_rate \
  extra_sleep_fraction \
  extra_sleep_per_reading \
+ SNR \
 ";
 > all_stats.txt
 rm *.stat.txt 2> /dev/null
@@ -209,6 +210,20 @@ cat models2.txt | sed "s/ /\n/g" | ./histogram.awk | sort -f | sed -e "s/[#:]//g
 rm models2.txt
 echo "$PLT_COMMON set output 'models.png'; set logscale y; unset xtics; plot 'models.txt' using 1:2 with boxes;" |gnuplot
 
+# plot CDF of SNR
+echo "CDF of SNR"
+for log in users/*.log2; do
+  tail -n 30 $log | grep -a -m 1 SNR | sed 's/^.*SNR //g'
+done > SNR_all_users.txt
+total=`cat SNR_all_users.txt|wc -l`
+
+cat SNR_all_users.txt | sort -n > SNR_all_users.txt2
+mv SNR_all_users.txt2 SNR_all_users.txt
+echo "$PLT_COMMON set output 'SNR_all_users.png'; set logscale x; set xlabel 'SNR'; plot \\" > SNR_all_users.plt
+  echo "'SNR_all_users.txt' using 1:((\$0+1)/$total) w l, \\" >> SNR_all_users.plt
+echo "(0) title '' with lines" >> SNR_all_users.plt
+gnuplot SNR_all_users.plt
+
 
 # plot CDF of freq response (show every fifth frequency)
 echo "CDF of freq response"
@@ -230,7 +245,6 @@ for freq in `seq 0 5 35`; do
 done
 echo "(0) title '' with lines" >> freq_responses.plt
 gnuplot freq_responses.plt
-
 
 # TODO
 # confusion matrix: total, avg, CDF

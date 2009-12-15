@@ -1,27 +1,29 @@
 BEGIN{
-  /* constants */
+  # constants 
   ACTIVE=0;
   PASSIVE=1;
   ABSENT=2;
-  max_delta=10000000; /* ~116 days, this is just before Windows logs seem to start */
-  /* state variables */
+  max_delta=10000000; # ~116 days, this is just before Windows logs seem to start 
+
+  # state variables 
   timestamp=0;
   prev_timestamp=0;
   install_time=0;
-  new_file=0; /* set if the previous line had $2 == "file_end" */
-  /* start times for various states: */
+  new_file=0; # set if the previous line had $2 == "file_end" 
+  # start times for various states: 
   last_sleep_sonar_time=0;
   last_sleep_timeout_time=0;
   thread_start_time=0;
   last_sonar_time=0;
   state_start_time=0;
   last_active_time=0;
-  /* user states: */
+  # user states: 
   sleeping_sonar=0;
   sleeping_timeout=0;
-  user_state=ACTIVE; /* 0=active, 1=passive, 2=absent */
+  user_state=ACTIVE; # 0=active, 1=passive, 2=absent 
+  num_signals_recorded=0; # used for SNR
 
-  /* cumulative statistics */
+  # cumulative statistics 
   total_runtime=0;
   sleep_sonar_cnt=0;
   sleep_timeout_cnt=0;
@@ -32,9 +34,11 @@ BEGIN{
   active_len=0;
   passive_len=0;
   absent_len=0;
-  sonar_cnt=0; /* number of sonar readings taken */
-  ping_gain=0; /* from freq_response */
+  sonar_cnt=0; # number of sonar readings taken 
+  ping_gain=0; # from freq_response 
   displayTimeout=0;
+  noise_level=0;
+  signal_level=0;
 
   abnormal_termination=0;
 }
@@ -61,14 +65,14 @@ function change_user_state( new_state, timestamp ){
   user_state = new_state;
   state_start_time = timestamp;
 
-  /* if previously sleeping, state change means waking, so record sleep time */
+  # if previously sleeping, state change means waking, so record sleep time 
   if( sleeping_sonar == 1 ){
     sleep_sonar_len += timestamp - last_sleep_sonar_time;
     print timestamp, "SLEPT_SONAR", timestamp - last_sleep_sonar_time;
     sleeping_sonar = 0;
   }
   if( sleeping_timeout == 1 ){
-    /* this guard is needed because function can be called for past time */
+    # this guard is needed because function can be called for past time 
     if( last_sleep_timeout_time < timestamp ){
       sleep_timeout_len += timestamp - last_sleep_timeout_time;
       print timestamp, "SLEPT_TIMEOUT", timestamp - last_sleep_timeout_time;
@@ -79,7 +83,7 @@ function change_user_state( new_state, timestamp ){
 }
 
 function sleep_sonar( timestamp ){
-  if( user_state != ABSENT ){ /* we may already be sleeping due to other policy */
+  if( user_state != ABSENT ){ # we may already be sleeping due to other policy 
     change_user_state( ABSENT, timestamp );
   }
   sleep_sonar_cnt += 1;
@@ -88,7 +92,7 @@ function sleep_sonar( timestamp ){
 }
 
 function sleep_timeout( timestamp ){
-  if( user_state != ABSENT ){ /* we may already be sleeping due to other policy */
+  if( user_state != ABSENT ){ # we may already be sleeping due to other policy 
     change_user_state( ABSENT, timestamp );
   }
   sleep_timeout_cnt += 1;
@@ -100,7 +104,7 @@ function session_begin(){
   print timestamp, "BEGIN";
   user_state = PASSIVE;
   state_start_time = timestamp;
-  last_sonar_time = timestamp * 2; /* choose an arbitrary large value so that comparison condition below is not met until a real past sonar time is available */
+  last_sonar_time = timestamp * 2; # choose an arbitrary large value so that comparison condition below is not met until a real past sonar time is available 
   last_active_time = timestamp * 2;
   thread_start_time = timestamp;
   sleeping_sonar = 0;
@@ -109,27 +113,27 @@ function session_begin(){
 
 function session_end( timestamp ){
   print timestamp, "END";
-  /* simply ignore duplicate ends, as these are common */
+  # simply ignore duplicate ends, as these are common 
   if( thread_start_time == 0 ){ return };
-  change_user_state( ABSENT, timestamp ); /* record last state */
+  change_user_state( ABSENT, timestamp ); # record last state 
   total_runtime += timestamp - thread_start_time;
-  /* resetting these allows us to find instances with missing "begin" */
+  # resetting these allows us to find instances with missing "begin" 
   thread_start_time = 0;  
   state_start_time = 0;
   last_sonar_time = 0;
 }
 
 /./{
-  /* ==================== SANITY CHECKS =======================*/
-  /* test that first line is sane */
+  # ==================== SANITY CHECKS =======================
+  # test that first line is sane 
   if( NR == 1 ){
     if( $2 !~ /model/ ){
       fail();
     }
   }
-  /* test that first line in each log file is sane */
+  # test that first line in each log file is sane 
   if( new_file == 1 ){
-    /* should have absolute, not relative, timestamp */
+    # should have absolute, not relative, timestamp 
     if( $1 < max_delta ){
       fail();
     }
@@ -139,27 +143,27 @@ function session_end( timestamp ){
     new_file = 1;
   }
 
-  /* ==================== FIX TIMESTAMP =======================*/
+  # ==================== FIX TIMESTAMP =======================
   if( $1 > max_delta ){
-    /* absolute timestamp */
+    # absolute timestamp 
     if( $1 < timestamp ){
-       /* we just went backward in time! */
+       # we just went backward in time! 
        fail();
     }
     if( timestamp != 0 && $1 > 2*timestamp ){
-       /* we just went way forward in time! */
+       # we just went way forward in time! 
        fail();
     }
     timestamp = $1;
     print $0;
     if( install_time == 0 ){
-      /* record initial time */
+      # record initial time 
       install_time = $1;
-      /* this shouldn't be necessary, but is */
+      # this shouldn't be necessary, but is 
       session_begin();
     }	
   }else{
-    /* relative timestamp, must rewrite line */
+    # relative timestamp, must rewrite line 
     timestamp = timestamp + $1;
     printf( "%d", timestamp );
     for(i=2;i<=NF;i++){
@@ -180,34 +184,42 @@ function session_end( timestamp ){
     }
   }
 
-  /* ==================== PARSE OPCODE =======================*/
-  /* sonar reading */
+  # ==================== PARSE OPCODE =======================
+  # sonar reading 
   if(( $2 ~ /[0-9]\.[0-9].*/ ) && ( $3 ~ /[0-9]\.[0-9].*/ )){
     if( user_state != ABSENT ){
-      /* only count sonar readings that were necessary */
+      # only count sonar readings that were necessary 
       sonar_cnt += 1;
+
+      # Use first few sonar mean readings for SNR calculation.
+      # freq response lasts 10 seconds, while each ping is 0.5 seconds, hence the factor of 20 below 
+      if( num_signals_recorded < 20 ){
+        num_signals_recorded += 1;
+        # record mean of sonar reading for SNR calculation 
+        signal_level += $2;
+      }
     }
-    /* allow implicit "begin" */
+    # allow implicit "begin" 
     if( last_sonar_time == 0 ){
       session_begin();
     }
-    /* if newly inactive */
+    # if newly inactive 
     if( user_state == ACTIVE ){
       change_user_state( PASSIVE, timestamp );
-    /* if newly active-inactive */
+    # if newly active-inactive 
     }else if( timestamp - last_sonar_time > 3 ){
-      /* two sessions are recorded */
+      # two sessions are recorded 
       if( sleeping_sonar == 1 ){
-        /* if sonar was shut off, then we have no real record of when user became active.  Approximate by just before current time.  First active interval after sleep is therefore lost. */
+        # if sonar was shut off, then we have no real record of when user became active.  Approximate by just before current time.  First active interval after sleep is therefore lost. 
         change_user_state( ACTIVE, timestamp-1 );
       }else{
-        /* if sonar was still running, then last active interval started when sonar stopped */
+        # if sonar was still running, then last active interval started when sonar stopped 
         change_user_state( ACTIVE, last_sonar_time );
       }
       change_user_state( PASSIVE, timestamp );
     }
     last_sonar_time = timestamp;
-  /* active, note that there msgs are omitted in version 0.7 so we use hack above to estimate activity */
+  # active, note that there msgs are omitted in version 0.7 so we use hack above to estimate activity 
   }else if(( $2 == "active" ) || ( $2 == "wakeup" ) || ( $2 == "threshold" )){
     change_user_state( ACTIVE, timestamp );
   }else if(( $2 == "begin" ) || ( $2 == "resume" )){
@@ -215,18 +227,18 @@ function session_end( timestamp ){
   }else if(( $2 == "end" ) || ( $2 == "complete" )){
     session_end( timestamp );
   }else if( $2 == "suspend" ){ 
-    /* suspend message seems to be logged after resume, so use previous timestamp */
+    # suspend message seems to be logged after resume, so use previous timestamp 
     session_end( prev_timestamp );
   }else if( $2 == "false" ){
-    if( $3 == "sleep" ){ /* sonar sleep */
+    if( $3 == "sleep" ){ # sonar sleep 
       false_sonar_cnt += 1;
       sleep_sonar_cnt -= 1;
-      /* don't record the last small segment as absent but passive */
+      # don't record the last small segment as absent but passive 
       user_state = PASSIVE;
       sleeping_sonar = 0;
       change_user_state( ACTIVE, timestamp )
     }else if( $3 == "timeout" ){
-      /* correct for repetitive sleep timeout bug */
+      # correct for repetitive sleep timeout bug 
       if( timestamp - last_sleep_timeout_time < 5 ){
         false_timeout_cnt += 1;
         sleep_timeout_cnt -= 1;
@@ -240,45 +252,52 @@ function session_end( timestamp ){
     if( $3 == "sonar" ){
       sleep_sonar( timestamp );
     }else if( $3 == "timeout" ){
-      /* must be the first message in the buggy repetitive sleep series */
+      # must be the first message in the buggy repetitive sleep series 
       if( !sleeping_timeout ){
         sleep_timeout( timestamp );
       }
     }
   }else if( $2 == "displayTimeout" ){
     displayTimeout = $3;
-  /* freq response */
+  # freq response 
   }else if( $2 == "response" ){
-    /* we don't have the freq reponse at 22khz, so we avg the two straddling values */
+    # we don't have the freq reponse at 22khz, so we avg the two straddling values 
     split( $22, fields, /[:,]/ );
     split( $23, fields2, /[:,]/ );
     if( fields[3] != 0 && fields2[3] != 0){
       ping_gain = ( (fields[2]/fields[3]) + (fields2[2]/fields2[3]) )/2;
     }
+    noise_level = (fields[3] + fields2[3]) / (2);
   }
   prev_timestamp = timestamp;
 }
 END{
   session_end( timestamp );
 
+  # reject logs without freq response
+  if( noise_level == 0 || num_signals_recorded < 20 ){
+    exit(1);
+  }
+  # we want SNR for all logs, even "bad" ones
+  printf( "%d SNR %f\n", timestamp, signal_level/noise_level );
+
   if( abnormal_termination ){
     exit(1);
   }
-
-  /* reject unfit logs */
+  # reject unfit logs 
   if( total_runtime < 3600 ){
     exit(1);
   }
-  /* reject short logs */ 
+  # reject short logs  
   if( NR < 100 ){
     exit(1);
   }
-  /* reject logs without more than one sonar sleep (indicates sonar didn't work) */ 
+  # reject logs without more than one sonar sleep (indicates sonar didn't work)  
   if( sleep_sonar_cnt < 2 ){
     exit(1);
   }
 
-  /* print log stats */
+  # print log stats 
   present_len = active_len + passive_len;
   printf( "%d total_duration %d\n", timestamp, timestamp-install_time );
   printf( "%d total_runtime %d\n", timestamp, total_runtime );
@@ -299,7 +318,7 @@ END{
   printf( "%d active_len %d\n", timestamp, active_len );
   printf( "%d passive_len %d\n", timestamp, passive_len );
   printf( "%d absent_len %d\n", timestamp, absent_len );
-  /* same variable by a different name */
+  # same variable by a different name 
   sleep_total_len = absent_len;
   printf( "%d sleep_total_len %d\n", timestamp, sleep_total_len );
   if( passive_len > 0 ){
