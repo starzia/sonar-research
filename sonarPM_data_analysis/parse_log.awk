@@ -196,7 +196,7 @@ function session_end( timestamp ){
       if( num_signals_recorded < 20 ){
         num_signals_recorded += 1;
         # record mean of sonar reading for SNR calculation 
-        signal_level += $2;
+        signal_level += $2/20;
       }
     }
     # allow implicit "begin" 

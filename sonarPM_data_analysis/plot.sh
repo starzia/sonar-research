@@ -1,7 +1,12 @@
 #!/bin/bash
 # This script does all the log file processing
 #
-# Note that using tmpfs (with many inodes for small files) speeds things up:
+# There are two optional flags:
+#  --download    First download the latest logs from the ftp server "belmont".
+#  --nogunzip    Don't decompress the logs again.  Use this if script has already
+#                been run at least once (so logs are already decompressed).
+#
+# Note that using tmpfs (with many inodes for small files) might speed things up:
 # sudo /bin/mount -t tmpfs -o size=2G,nr_inodes=200k,mode=0775,noatime,nodiratime tmpfs /mnt/tmpfs
 
 
@@ -20,7 +25,7 @@ function barrier {
     sleep 1
   done
 }
-# a single lock, implemented as a directory
+# a single lock, implemented as a directory (mkdir is like test-and-set)
 function lock {
   while ! mkdir .lock 2> /dev/null; do
     sleep 0.01
@@ -45,7 +50,7 @@ find sonar/*.gz sonar/2009* > tmp_all_logs.txt
 FIND_LOGS="cat tmp_all_logs.txt"
 PLT_COMMON="set terminal png large size 1280,1024; set grid; "
 
-if [ "$1" == "--download" ]; then
+if [ "$1" == "--download" ] || [ ! "$1" == "--nogunzip" ]; then
   # concatenate log files into one file for each user
   echo "concatenate log files"
   mkdir users 2> /dev/null # store a single concatenated log for each user
@@ -58,7 +63,7 @@ if [ "$1" == "--download" ]; then
       filename=`echo $log | sed -e 's/\//-/g'`
       # check that we didn't decompress this log in a previous script run
       if [ ! -f logs/$filename ]; then
-        gzip -t $log 2> /dev/null # verify that user's file upload succeeded
+        gzip -t $log 2> /dev/null # verify that file is uncorrupted (ie, user's file upload succeeded)
         test $? == 0 && (zcat -q $log > logs/$filename; dos2unix -q logs/$filename)
       fi
       if [ -f logs/$filename ]; then
@@ -128,18 +133,6 @@ echo `ls users/*.log2tail | wc -l` good users
 
 # plot log statistics CDFs, items joined with a + will be on same plot
 echo "CDFs of log statistics"
-old_plot_list="\
- total_duration+total_runtime+log_lines \
- sonar_cnt+sleep_sonar_cnt+sleep_timeout_cnt+false_sonar_cnt+false_timeout_cnt \
- sleep_sonar_len+sleep_timeout_len+sleep_total_len \
- sonar_timeout_ratio \
- active_len+passive_len+absent_len \
- active_passive_ratio \
- present_absent_ratio \
- sample_rate \
- ping_gain \
- displayTimeout \
-";
 plot_list="\
  total_duration+total_runtime \
  sleep_sonar_cnt+sleep_timeout_cnt+false_sonar_cnt+false_timeout_cnt \
