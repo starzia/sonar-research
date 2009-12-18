@@ -1,4 +1,0 @@
-b3b18f9e-438b-4512-8ef7-376db5cb4289 too long active
-bfaafdf7-cc2c-48c0-bdd6-fb0e4df5bea3 very slow sonar readings ~16seconds
-linux1256064331 at time 1256069225, sonar stops after sleep timeout, so this is interpreted as becoming active, actually it is just trying to recalibrate.
-1feaaefd-5c95-41ff-8884-19ce3785971f seems to have same problem as bfaa...
