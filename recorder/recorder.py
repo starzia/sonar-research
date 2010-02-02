@@ -1,6 +1,9 @@
 #!/usr/bin/python
 #-----------------------------------------
 # Stephen Tarzia, starzia@northwestern.edu
+#
+# NOTE: the calibration proceduce depends on functions in extras.py
+# so running this will not work.
 #-----------------------------------------
 
 # NOTE: numpy is an optional package in most linux distributions

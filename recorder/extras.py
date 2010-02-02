@@ -471,6 +471,40 @@ def CTFM_scope( ping_length = 1, ping_period = 0.01, freq_start = 20000,
         draw()
         real_sleep( 0.2 )
 
+
+def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
+                  freq_end = 2000 ):
+    """gives an interactive view of the cross correlations"""
+    # set up the plot
+    gnuplot = subprocess.Popen(["gnuplot"], shell=True, \
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    print >>gnuplot.stdin, "set title 'cross correlation';"
+
+    OFFSET = 1 # reduces crosscorellation resolution to speed up display
+
+    ping = lin_sweep_tone( ping_period, freq_start, freq_end )
+    # autocorrelation
+    ac = cross_corellation_au( ping, ping, OFFSET, int( ping_period*RATE ) )
+    max_y = 0
+    while 1:
+        cc = measure_ping_CTFM( ping, ping_length , OFFSET )
+        if( cc.max() > max_y ): 
+            max_y = cc.max()
+        # note that we are preserving the maximum y axis extent
+        print >>gnuplot.stdin, "set yrange [0:%f];" % max_y
+
+        # plot it
+        print >>gnuplot.stdin, "plot '-' with lines title 'autocorrelation', '' with lines title 'recording';"
+        for i in ac:
+            print >>gnuplot.stdin, i
+        print >>gnuplot.stdin, "EOF"
+        for i in cc:
+            print >>gnuplot.stdin, i
+        print >>gnuplot.stdin, "EOF"
+        #real_sleep( 0.2 )
+
+
+
 def plot_audio( audio_buf ):
     from pylab import plot
     plot( audio2array( audio_buf ) )
