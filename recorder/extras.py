@@ -77,7 +77,7 @@ def lin_sweep_tone( duration, start_freq, end_freq, delay=0 ):
     return data.tostring()
 
 def highpass( audio_buf, RC ):
-    """Return RC high-pass filter output samples, given input samples,
+    """Return RC high-pass filtered audio buffer, given input buffer,
     and time constant RC.
     The method is time-domain simulation of an RC filter."""
     x = audio2array( audio_buf )
@@ -86,7 +86,19 @@ def highpass( audio_buf, RC ):
     y[0] = x[0]
     for i in range( 1, x.size ):
         y[i] = alpha*(y[i-1] + x[i] - x[i-1])
-    return y
+    return y.tostring()
+
+def lowpass( audio_buf, RC ):
+    """Return RC low-pass filtered audio buffer, given input buffer,
+    and time constant RC.
+    The method is time-domain simulation of an RC filter."""
+    x = audio2array( audio_buf )
+    y = empty( (x.size,), dtype=int16 )
+    alpha = float(RC) / (RC + T_s)
+    y[0] = x[0]
+    for i in range( 1, x.size ):
+        y[i] = y[i-1] + alpha * (x[i] - y[i-1])
+    return y.tostring()
 
 def energy_versus_time( audio_buffer, freq, window_size=0.01, N=FFT_POINTS ):
     """returns the energy of the given frequency in the buffer as a function
@@ -478,13 +490,9 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
     # set up the plots
     gnuplot = subprocess.Popen(["gnuplot"], shell=True, \
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    print >>gnuplot.stdin, "set title 'cross correlation';"
-    gnuplot2 = subprocess.Popen(["gnuplot"], shell=True, \
-                               stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    print >>gnuplot2.stdin, "set title 'mixed frequency spectrum';"
+    print >>gnuplot.stdin, "set terminal x11;"
 
     OFFSET = 1 # reduces crosscorellation resolution to speed up display
-
     ping = lin_sweep_tone( ping_period, freq_start, freq_end )
     # autocorrelation
     ac = cross_corellation_au( ping, ping, OFFSET, int( ping_period*RATE ) )
@@ -499,7 +507,6 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
     
         # start non-blocking record
         arecord = subprocess.Popen(["arecord", 
-                                   #("--device=%s"%"default:CARD=U0x46d0x8b0"),
                                     ("--device=%s"%"default"),
                                     ("--rate=%d"%RATE), 
                                     ("--duration=%f"%ping_length), 
@@ -516,29 +523,54 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
             if( cc.max() > max_y ): 
                 max_y = cc.max()
             # calculate mixed frequency spectrum
-            # TODO: low-pass filter the mixed signal so we get only the
-            # difference signal, not the sum as well.
             mixed = audio2array( recording ) * audio2array( full_ping )
-            [ F, Y ] = welch_energy_spectrum( mixed.tostring() )
+            ## low-pass filter the mixed signal so we get only the
+            ## difference signal, not the sum as well.
+            #filtered = lowpass( mixed.tostring(), 1.0/(freq_start) )
+            #[ F, M ] = welch_energy_spectrum( filtered )
+            [ F, M ] = welch_energy_spectrum( mixed )
+            [ F, Y ] = welch_energy_spectrum( recording )
         else:
             cc=ac
-            [F,Y]=[ones(1),zeros(1)]
+            [F,Y,M]=[array([0,1]),array([0,1]),array([0,1])]
 
         # plot it
+        print >>gnuplot.stdin, "set multiplot layout 2,2 title 'CTFM sonar %dHz to %dHz in %f sec (%dHz sample rate)';" % (freq_start, freq_end, ping_period, RATE )
+        print >>gnuplot.stdin, "set xrange [*:*];" # autoscale range
+
+        print >>gnuplot.stdin, "set title 'ping autocorrelation';"
+        print >>gnuplot.stdin, "set xlabel 'lag (samples)'";
         print >>gnuplot.stdin, "plot '-' using ($1/%f) with lines \
-          title 'autocorrelation', '' using ($1/%f) with lines \
-          title 'recording';" % (ac.max(), cc.max() )
+          title 'autocorrelation';" % ac.max()
         for i in ac:
             print >>gnuplot.stdin, i
         print >>gnuplot.stdin, "EOF"
+        print >>gnuplot.stdin, "set title 'recording-ping cross correlation';"
+        print >>gnuplot.stdin, "plot '-' using ($1/%f) with lines \
+          title 'recording';" % cc.max()
         for i in cc:
             print >>gnuplot.stdin, i
         print >>gnuplot.stdin, "EOF"
-        print >>gnuplot2.stdin, "plot '-' using 1:($2/%f) with lines \
+        
+        print >>gnuplot.stdin, "set title 'recording spectrum';"
+        print >>gnuplot.stdin, "set xlabel 'frequency (Hz)"
+        #print >>gnuplot.stdin, "set logscale x;"
+        print >>gnuplot.stdin, "plot '-' using 1:($2/%f) with lines \
           title 'spectrum';" % Y.max()
         for i in range( size(Y) ):
-            print >>gnuplot2.stdin, F[i], Y[i]
-        print >>gnuplot2.stdin, "EOF"
+            print >>gnuplot.stdin, F[i], Y[i]
+        print >>gnuplot.stdin, "EOF"
+        #print >>gnuplot.stdin, "unset logscale x;"
+
+        print >>gnuplot.stdin, "set title 'mixed frequency spectrum';"
+        # below, limit view to possible freq differences only
+        print >>gnuplot.stdin, "set xrange [0:%f];" %abs(freq_start - freq_end)
+        print >>gnuplot.stdin, "plot '-' using 1:($2/%f) with lines \
+          title 'spectrum';" % M.max()
+        for i in range( size(M) ):
+            print >>gnuplot.stdin, F[i], M[i]
+        print >>gnuplot.stdin, "EOF"
+        print >>gnuplot.stdin, "unset multiplot;"
 
         # wait for recording to finish
         arecord.wait()
