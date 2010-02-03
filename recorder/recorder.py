@@ -93,7 +93,7 @@ def tone( duration=0.5, freq=440, delay=0, FADE_SAMPLES=44,
         data[tone_length-1-i] = int( attenuation * data[tone_length-1-i] )
 
     data = prepend_silence( data, delay )
-    return data.tostring()
+    return data.tostring() # tostring() serves as array2audio()
 
 def prepend_silence( audio, silence_duration, sample_rate=RATE ):
     """prepend silence_duration seconds of silence to the audio buffer"""

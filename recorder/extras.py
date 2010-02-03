@@ -475,10 +475,13 @@ def CTFM_scope( ping_length = 1, ping_period = 0.01, freq_start = 20000,
 def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
                   freq_end = 2000 ):
     """gives an interactive view of the cross correlations"""
-    # set up the plot
+    # set up the plots
     gnuplot = subprocess.Popen(["gnuplot"], shell=True, \
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     print >>gnuplot.stdin, "set title 'cross correlation';"
+    gnuplot2 = subprocess.Popen(["gnuplot"], shell=True, \
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    print >>gnuplot2.stdin, "set title 'mixed frequency spectrum';"
 
     OFFSET = 1 # reduces crosscorellation resolution to speed up display
 
@@ -495,9 +498,9 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
         play_audio( full_ping )
     
         # start non-blocking record
-        # FIXME: usb audio device is hard coded below
         arecord = subprocess.Popen(["arecord", 
-                                    ("--device=%s"%"default:CARD=U0x46d0x8b0"),
+                                   #("--device=%s"%"default:CARD=U0x46d0x8b0"),
+                                    ("--device=%s"%"default"),
                                     ("--rate=%d"%RATE), 
                                     ("--duration=%f"%ping_length), 
                                     "--format=S16_LE",
@@ -507,15 +510,20 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
         
         # process previous iteration's recording, if not 1st iteration
         if( j > 1 ):
-            recording = read_audio( "out.wav" ) 
+            recording = read_audio( "out.wav", False ) #its mono 
+            # calculate cross correlation
             cc = recording_xcorr( recording, ping, ping_period, OFFSET )
             if( cc.max() > max_y ): 
                 max_y = cc.max()
+            # calculate mixed frequency spectrum
+            # TODO: low-pass filter the mixed signal so we get only the
+            # difference signal, not the sum as well.
+            mixed = audio2array( recording ) * audio2array( full_ping )
+            [ F, Y ] = welch_energy_spectrum( mixed.tostring() )
         else:
             cc=ac
-        ## note that we are preserving the maximum y axis extent
-        #print >>gnuplot.stdin, "set yrange [0:%f];" % max_y
-        #print >>gnuplot.stdin, "set yrange [0:.2];"
+            [F,Y]=[ones(1),zeros(1)]
+
         # plot it
         print >>gnuplot.stdin, "plot '-' using ($1/%f) with lines \
           title 'autocorrelation', '' using ($1/%f) with lines \
@@ -526,6 +534,11 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
         for i in cc:
             print >>gnuplot.stdin, i
         print >>gnuplot.stdin, "EOF"
+        print >>gnuplot2.stdin, "plot '-' using 1:($2/%f) with lines \
+          title 'spectrum';" % Y.max()
+        for i in range( size(Y) ):
+            print >>gnuplot2.stdin, F[i], Y[i]
+        print >>gnuplot2.stdin, "EOF"
 
         # wait for recording to finish
         arecord.wait()
