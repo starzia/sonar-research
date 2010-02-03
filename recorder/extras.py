@@ -486,22 +486,49 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
     # autocorrelation
     ac = cross_corellation_au( ping, ping, OFFSET, int( ping_period*RATE ) )
     max_y = 0
+    recording=0
+    j=0
     while 1:
-        cc = measure_ping_CTFM( ping, ping_length , OFFSET )
-        if( cc.max() > max_y ): 
-            max_y = cc.max()
-        # note that we are preserving the maximum y axis extent
-        print >>gnuplot.stdin, "set yrange [0:%f];" % max_y
-
+        j+=1
+        # start non-blocking playback
+        full_ping = audio_repeat( ping, int(ceil(ping_length/ping_period))  )
+        play_audio( full_ping )
+    
+        # start non-blocking record
+        # FIXME: usb audio device is hard coded below
+        arecord = subprocess.Popen(["arecord", 
+                                    ("--device=%s"%"default:CARD=U0x46d0x8b0"),
+                                    ("--rate=%d"%RATE), 
+                                    ("--duration=%f"%ping_length), 
+                                    "--format=S16_LE",
+                                    "--channels=1",
+                                    "--quiet", 
+                                    "out.wav"])
+        
+        # process previous iteration's recording, if not 1st iteration
+        if( j > 1 ):
+            recording = read_audio( "out.wav" ) 
+            cc = recording_xcorr( recording, ping, ping_period, OFFSET )
+            if( cc.max() > max_y ): 
+                max_y = cc.max()
+        else:
+            cc=ac
+        ## note that we are preserving the maximum y axis extent
+        #print >>gnuplot.stdin, "set yrange [0:%f];" % max_y
+        #print >>gnuplot.stdin, "set yrange [0:.2];"
         # plot it
-        print >>gnuplot.stdin, "plot '-' with lines title 'autocorrelation', '' with lines title 'recording';"
+        print >>gnuplot.stdin, "plot '-' using ($1/%f) with lines \
+          title 'autocorrelation', '' using ($1/%f) with lines \
+          title 'recording';" % (ac.max(), cc.max() )
         for i in ac:
             print >>gnuplot.stdin, i
         print >>gnuplot.stdin, "EOF"
         for i in cc:
             print >>gnuplot.stdin, i
         print >>gnuplot.stdin, "EOF"
-        #real_sleep( 0.2 )
+
+        # wait for recording to finish
+        arecord.wait()
 
 
 
