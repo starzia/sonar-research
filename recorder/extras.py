@@ -399,6 +399,7 @@ def recording_xcorr( rec, ping, ping_period, offset=1 ):
     period_samples = int( RATE*ping_period / offset )
 
     # confine to a window
+    # TODO: is this neccessary?
     rec = audio_window( rec, length/2.0, REC_PADDING+0.1 )
 
     cross_corr = cross_corellation_au( rec, ping, offset, 2*period_samples )
@@ -407,7 +408,7 @@ def recording_xcorr( rec, ping, ping_period, offset=1 ):
     # value and lasting for just over one period length
     peak_loc = cross_corr.argmax()
     # if the largest peak happens to be at the beginning of the last
-    #  (incomplete) period, then choose the previous corresponding peak
+    #  (incomplete) period, then choose the previous corresponding period
     if peak_loc+period_samples >= cross_corr.size:
         peak_loc = peak_loc-period_samples
     cross_corr = cross_corr[peak_loc:]
@@ -485,14 +486,14 @@ def CTFM_scope( ping_length = 1, ping_period = 0.01, freq_start = 20000,
 
 
 def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
-                  freq_end = 2000 ):
-    """gives an interactive view of the cross correlations"""
+                  freq_end = 2000, OFFSET=1 ):
+    """gives an interactive view of the cross correlations,
+    OFFSET can be used to reduce xcorr resolution to speed up display"""
     # set up the plots
     gnuplot = subprocess.Popen(["gnuplot"], shell=True, \
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     print >>gnuplot.stdin, "set terminal x11;"
 
-    OFFSET = 1 # reduces crosscorellation resolution to speed up display
     ping = lin_sweep_tone( ping_period, freq_start, freq_end )
     # autocorrelation
     ac = cross_corellation_au( ping, ping, OFFSET, int( ping_period*RATE ) )
@@ -519,7 +520,7 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
         if( j > 1 ):
             recording = read_audio( "out.wav", False ) #its mono 
             # calculate cross correlation
-            cc = recording_xcorr( recording, ping, ping_period, OFFSET )
+            cc = recording_xcorr( recording, full_ping, ping_period, OFFSET )
             if( cc.max() > max_y ): 
                 max_y = cc.max()
             # calculate mixed frequency spectrum
