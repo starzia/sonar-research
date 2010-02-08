@@ -491,9 +491,10 @@ def CTFM_scope( ping_length = 1, ping_period = 0.01, freq_start = 20000,
 
 
 def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
-                  freq_end = 2000, OFFSET=1 ):
+                  freq_end = 2000, OFFSET=1, HISTORY=4 ):
     """gives an interactive view of the cross correlations,
-    OFFSET can be used to reduce xcorr resolution to speed up display"""
+    OFFSET can be used to reduce xcorr resolution to speed up display
+    HISTORY is the number of plots to display"""
     # set up the plots
     gnuplot = subprocess.Popen(["gnuplot"], shell=True, \
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -523,59 +524,34 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
         
         # process previous iteration's recording, if not 1st iteration
         if( j > 1 ):
+            # shift history
+            cc.pop(0)
             recording = read_audio( "out.wav", False ) #its mono 
             # calculate cross correlation
-            cc = recording_xcorr( recording, full_ping, ping_period, OFFSET )
-            if( cc.max() > max_y ): 
-                max_y = cc.max()
-            # calculate mixed frequency spectrum
-            mixed = audio2array( recording ) * audio2array( full_ping )
-            ## low-pass filter the mixed signal so we get only the
-            ## difference signal, not the sum as well.
-            #filtered = lowpass( mixed.tostring(), 1.0/(freq_start) )
-            #[ F, M ] = welch_energy_spectrum( filtered )
-            [ F, M ] = welch_energy_spectrum( mixed )
+            cc.append( recording_xcorr( recording, full_ping,
+                                      ping_period, OFFSET ) )
+            ## calculate mixed frequency spectrum
+            #mixed = audio2array( recording ) * audio2array( full_ping )
+            #[ F, M ] = welch_energy_spectrum( mixed )
             [ F, Y ] = welch_energy_spectrum( recording )
         else:
-            cc=ac
+            cc = []
+            for k in range( HISTORY ):
+                cc.append( ac )
             [F,Y,M]=[array([0,1]),array([0,1]),array([0,1])]
 
         # plot it
-        print >>gnuplot.stdin, "set multiplot layout 2,2 title 'CTFM sonar %dHz to %dHz in %f sec (%dHz sample rate)';" % (freq_start, freq_end, ping_period, RATE )
+        print >>gnuplot.stdin, "set multiplot layout %d,1 title 'CTFM sonar %dHz to %dHz in %f sec (%dHz sample rate)';" % (HISTORY, freq_start, freq_end, ping_period, RATE )
         print >>gnuplot.stdin, "set xrange [*:*];" # autoscale range
+        print >>gnuplot.stdin, "unset xtics;"
 
-        print >>gnuplot.stdin, "set title 'ping autocorrelation';"
-        print >>gnuplot.stdin, "set xlabel 'lag (samples)'";
-        print >>gnuplot.stdin, "plot '-' using ($1/%f) with lines \
-          title 'autocorrelation';" % ac.max()
-        for i in ac:
-            print >>gnuplot.stdin, i
-        print >>gnuplot.stdin, "EOF"
-        print >>gnuplot.stdin, "set title 'recording-ping cross correlation';"
-        print >>gnuplot.stdin, "plot '-' using ($1/%f) with lines \
-          title 'recording';" % cc.max()
-        for i in cc:
-            print >>gnuplot.stdin, i
-        print >>gnuplot.stdin, "EOF"
+        for cc_i in cc:
+            print >>gnuplot.stdin, "plot '-' using ($1/%f) with lines \
+            title '';" % cc_i.max()
+            for i in cc_i:
+                print >>gnuplot.stdin, i
+            print >>gnuplot.stdin, "EOF"
         
-        print >>gnuplot.stdin, "set title 'recording spectrum';"
-        print >>gnuplot.stdin, "set xlabel 'frequency (Hz)"
-        #print >>gnuplot.stdin, "set logscale x;"
-        print >>gnuplot.stdin, "plot '-' using 1:($2/%f) with lines \
-          title 'spectrum';" % Y.max()
-        for i in range( size(Y) ):
-            print >>gnuplot.stdin, F[i], Y[i]
-        print >>gnuplot.stdin, "EOF"
-        #print >>gnuplot.stdin, "unset logscale x;"
-
-        print >>gnuplot.stdin, "set title 'mixed frequency spectrum';"
-        # below, limit view to possible freq differences only
-        print >>gnuplot.stdin, "set xrange [0:%f];" %abs(freq_start - freq_end)
-        print >>gnuplot.stdin, "plot '-' using 1:($2/%f) with lines \
-          title 'spectrum';" % M.max()
-        for i in range( size(M) ):
-            print >>gnuplot.stdin, F[i], M[i]
-        print >>gnuplot.stdin, "EOF"
         print >>gnuplot.stdin, "unset multiplot;"
 
         # wait for recording to finish
