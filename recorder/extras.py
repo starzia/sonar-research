@@ -178,12 +178,14 @@ def cross_corellation( vector, source_vector, offset=100, N=100 ):
     vector = array( vector, dtype=float32 )
     source_vector = array( source_vector, dtype=float32 )
 
+    conv_len = min( [ len(vector), len(source_vector) ] )
     for i in range( N ):
-        C[i] = dot( source_vector[:len(vector) - i*offset],
-                    vector[ i*offset : len(source_vector) ] )
-        
-        # negative correlation terms are irrelevant
-        if C[i] < 0: C[i] = 0
+        if conv_len-i*offset >= 0:
+            C[i] = dot( source_vector[:conv_len - i*offset],
+                        vector[ i*offset : conv_len ] )
+            
+            # sign of correlation terms is irrelevant
+            if C[i] < 0: C[i] = -C[i]
     return C
 
 def cross_corellation_au( audio_buf, source_audio_buf, offset=100, N=100 ):
