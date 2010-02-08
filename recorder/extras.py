@@ -167,18 +167,23 @@ def unequal_dot( vec1, vec2 ):
     return ( (vec1[:len(vec2)]>>8) * (vec2[:len(vec1)]>>8) ).sum()
 
 def cross_corellation( vector, source_vector, offset=100, N=100 ):
-    """returns a vector of cross_correlation for increaing lags.
+    """returns a vector of cross_correlation for increasing lags.
+    N is the number of lags and
+    offset is the stride between consecutive lags
     TODO: start with negative lag rather than zero."""
     C = zeros( (N,) )
 
+    # convert from int16 to float32 arrays because float32 ops are faster
+    # (plus we can use the built-in dot fcn which is faster than the one above)
+    vector = array( vector, dtype=float32 )
+    source_vector = array( source_vector, dtype=float32 )
+
     for i in range( N ):
-        C[i] = unequal_dot( source_vector, vector )
-        # negative correlation terms are irrelevant
-        if C[i] < 0: C[i] = 1
+        C[i] = dot( source_vector[:len(vector) - i*offset],
+                    vector[ i*offset : len(source_vector) ] )
         
-        # add padding to the source
-        source_vector = hstack(  ( zeros((offset,), dtype=int16), 
-                                   source_vector ) )
+        # negative correlation terms are irrelevant
+        if C[i] < 0: C[i] = 0
     return C
 
 def cross_corellation_au( audio_buf, source_audio_buf, offset=100, N=100 ):
