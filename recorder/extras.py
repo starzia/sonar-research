@@ -492,7 +492,7 @@ def CTFM_scope( ping_length = 1, ping_period = 0.01, freq_start = 20000,
         real_sleep( 0.2 )
 
 
-def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
+def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
                   freq_end = 10000, OFFSET=1, HISTORY=50 ):
     """gives an interactive view of the cross correlations,
     OFFSET can be used to reduce xcorr resolution to speed up display
