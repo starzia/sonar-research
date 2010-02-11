@@ -493,7 +493,7 @@ def CTFM_scope( ping_length = 1, ping_period = 0.01, freq_start = 20000,
 
 
 def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
-                  freq_end = 2000, OFFSET=1, HISTORY=4 ):
+                  freq_end = 10000, OFFSET=1, HISTORY=50 ):
     """gives an interactive view of the cross correlations,
     OFFSET can be used to reduce xcorr resolution to speed up display
     HISTORY is the number of plots to display"""
@@ -515,6 +515,7 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
         play_audio( full_ping )
     
         # start non-blocking record
+        # TODO: lengthen buffer to prevent stuttering
         arecord = subprocess.Popen(["arecord", 
                                     ("--device=%s"%"default"),
                                     ("--rate=%d"%RATE), 
@@ -543,19 +544,28 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.01, freq_start = 20000,
             [F,Y,M]=[array([0,1]),array([0,1]),array([0,1])]
 
         # plot it
-        print >>gnuplot.stdin, "set multiplot layout %d,1 title 'CTFM sonar %dHz to %dHz in %f sec (%dHz sample rate)';" % (HISTORY, freq_start, freq_end, ping_period, RATE )
-        print >>gnuplot.stdin, "set xrange [*:*];" # autoscale range
-        print >>gnuplot.stdin, "unset xtics;"
+        print >>gnuplot.stdin, "set title 'CTFM sonar %dHz to %dHz in %f sec (%dHz sample rate)';" % (freq_start, freq_end, ping_period, RATE )
+        print >>gnuplot.stdin, "set cbrange [0:0.5];" # correlation coefs are normallized
+        #print >>gnuplot.stdin, "set isosamples %d,%d;" % ( len(ac), HISTORY )
+        print >>gnuplot.stdin, "set xlabel 'crosscorrelation lag (range map) (meters)';"
+        print >>gnuplot.stdin, "set ylabel 'time past (s)';"
+        print >>gnuplot.stdin, "set view map; set style data pm3d;" # unset surface"
+        #print >>gnuplot.stdin, "set palette positive nops_allcF maxcolors 0 gamma 1.5 gray;"
+        print >>gnuplot.stdin, "set palette positive color;"
 
+        print >>gnuplot.stdin, "splot '-' using ($2*%f):($1*%f):3 with pm3d \
+            title '';\n" % (330.0/RATE, ping_length), # 330 m/s speed of sound 
+        k=0
         for cc_i in cc:
-            print >>gnuplot.stdin, "plot '-' using ($1/%f) with lines \
-            title '';" % cc_i.max()
+            k+=1
+            cc_max = cc_i.max()
+            j=0
             for i in cc_i:
-                print >>gnuplot.stdin, i
-            print >>gnuplot.stdin, "EOF"
+                j+=1
+                print >>gnuplot.stdin, "%d %d %f" % (k,j,i/cc_max)
+            print >>gnuplot.stdin, ""
+        print >>gnuplot.stdin, "EOF"
         
-        print >>gnuplot.stdin, "unset multiplot;"
-
         # wait for recording to finish
         arecord.wait()
 
