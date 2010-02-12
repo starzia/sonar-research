@@ -500,16 +500,20 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
     # set up the plots
     gnuplot = subprocess.Popen(["gnuplot"], shell=True, \
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    print >>gnuplot.stdin, "set terminal x11;"
+    #print >>gnuplot.stdin, "set terminal x11;"
 
     ping = lin_sweep_tone( ping_period, freq_start, freq_end )
     # autocorrelation
     ac = cross_corellation_au( ping, ping, OFFSET, int( ping_period*RATE ) )
-    max_y = 0
     recording=0
-    j=0
+    
+    # initialize null values for first plotting
+    cc = []
+    for k in range( HISTORY ):
+        cc.append( zeros( len(ac) ) )
+
+    num_recordings = 0
     while 1:
-        j+=1
         # start non-blocking playback
         full_ping = audio_repeat( ping, int(ceil(ping_length/ping_period))  )
         play_audio( full_ping )
@@ -523,51 +527,45 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
                                     "--format=S16_LE",
                                     "--channels=1",
                                     "--quiet", 
-                                    "out.wav"])
+                                    "out%d.wav" % (num_recordings%2) ])
         
         # process previous iteration's recording, if not 1st iteration
-        if( j > 1 ):
+        if( num_recordings > 1 ):
             # shift history
             cc.pop(0)
-            recording = read_audio( "out.wav", False ) #its mono 
+            recording = read_audio( "out%d.wav" % ((num_recordings-1)%2),
+                                    False ) #its mono 
             # calculate cross correlation
             cc.append( recording_xcorr( recording, full_ping,
                                       ping_period, OFFSET ) )
-            ## calculate mixed frequency spectrum
-            #mixed = audio2array( recording ) * audio2array( full_ping )
-            #[ F, M ] = welch_energy_spectrum( mixed )
-            [ F, Y ] = welch_energy_spectrum( recording )
-        else:
-            cc = []
-            for k in range( HISTORY ):
-                cc.append( ac )
-            [F,Y,M]=[array([0,1]),array([0,1]),array([0,1])]
 
-        # plot it
-        print >>gnuplot.stdin, "set title 'CTFM sonar %dHz to %dHz in %f sec (%dHz sample rate)';" % (freq_start, freq_end, ping_period, RATE )
-        print >>gnuplot.stdin, "set cbrange [0:0.5];" # correlation coefs are normallized
-        #print >>gnuplot.stdin, "set isosamples %d,%d;" % ( len(ac), HISTORY )
-        print >>gnuplot.stdin, "set xlabel 'crosscorrelation lag (range map) (meters)';"
-        print >>gnuplot.stdin, "set ylabel 'time past (s)';"
-        print >>gnuplot.stdin, "set view map; set style data pm3d;" # unset surface"
-        #print >>gnuplot.stdin, "set palette positive nops_allcF maxcolors 0 gamma 1.5 gray;"
-        print >>gnuplot.stdin, "set palette positive color;"
+            # plot it
+            print >>gnuplot.stdin, "set title 'CTFM sonar %dHz to %dHz in %f sec (%dHz sample rate)';" % (freq_start, freq_end, ping_period, RATE )
+            print >>gnuplot.stdin, "set cbrange [0:1];" # correlation coefs are normallized
+            #print >>gnuplot.stdin, "set isosamples %d,%d;" % ( len(ac), HISTORY )
+            print >>gnuplot.stdin, "set xlabel 'crosscorrelation lag (range map) (meters)';"
+            print >>gnuplot.stdin, "set ylabel 'time past (s)';"
+            print >>gnuplot.stdin, "set view map; set style data pm3d;" # unset surface"
+            #print >>gnuplot.stdin, "set palette positive nops_allcF maxcolors 0 gamma 1.5 gray;"
+            print >>gnuplot.stdin, "set palette positive color;"
 
-        print >>gnuplot.stdin, "splot '-' using ($2*%f):($1*%f):3 with pm3d \
-            title '';\n" % (330.0/RATE, ping_length), # 330 m/s speed of sound 
-        k=0
-        for cc_i in cc:
-            k+=1
-            cc_max = cc_i.max()
-            j=0
-            for i in cc_i:
-                j+=1
-                print >>gnuplot.stdin, "%d %d %f" % (k,j,i/cc_max)
-            print >>gnuplot.stdin, ""
-        print >>gnuplot.stdin, "EOF"
+            # below, -0.5 is for pixel center offset and 330 m/s is speed of sound 
+            print >>gnuplot.stdin, "splot '-' using ($2*%f):($1*%f-0.5):3 \
+              with image title '';\n" % (330.0/RATE, ping_length), 
+            k=0
+            cc_max = cc[HISTORY-1].max() # normalize to the latest cc vector
+            for cc_i in cc:
+                k+=1
+                j=0
+                for i in cc_i:
+                    j+=1
+                    print >>gnuplot.stdin, "%d %d %f" % (k,j,i/cc_max)
+                print >>gnuplot.stdin, ""
+            print >>gnuplot.stdin, "EOF"
         
         # wait for recording to finish
         arecord.wait()
+        num_recordings += 1
 
 
 
