@@ -166,7 +166,7 @@ def unequal_dot( vec1, vec2 ):
     # multiplication.
     return ( (vec1[:len(vec2)]>>8) * (vec2[:len(vec1)]>>8) ).sum()
 
-def cross_corellation( vector, source_vector, offset=100, N=100 ):
+def cross_correlation( vector, lagged_vector, offset=1, N=100 ):
     """returns a vector of cross_correlation for increasing lags.
     N is the number of lags and
     offset is the stride between consecutive lags
@@ -176,29 +176,26 @@ def cross_corellation( vector, source_vector, offset=100, N=100 ):
     # convert from int16 to float32 arrays because float32 ops are faster
     # (plus we can use the built-in dot fcn which is faster than the one above)
     vector = array( vector, dtype=float32 )
-    source_vector = array( source_vector, dtype=float32 )
+    lagged_vector = array( lagged_vector, dtype=float32 )
 
-    conv_len = min( [ len(vector), len(source_vector) ] )
     for i in range( N ):
-        if conv_len-i*offset >= 0:
-            C[i] = dot( source_vector[:conv_len - i*offset],
-                        vector[ i*offset : conv_len ] )
-            
-            # sign of correlation terms is irrelevant
-            if C[i] < 0: C[i] = -C[i]
+        if i*offset < len(vector):
+            conv_len = min( [ len(vector)-i*offset, len(lagged_vector) ] )
+            C[i] = dot( lagged_vector[:conv_len],
+                        vector[ i*offset : i*offset+conv_len ] )
     return C
 
-def cross_corellation_au( audio_buf, source_audio_buf, offset=100, N=100 ):
-    return cross_corellation( audio2array(audio_buf), 
+def cross_correlation_au( audio_buf, source_audio_buf, offset=100, N=100 ):
+    return cross_correlation( audio2array(audio_buf), 
                               audio2array(source_audio_buf),
                               offset, N )
 
-def autocorellation( vector, offset=100, N=100 ):
-    """cross-corellation of a vector with itself"""
-    return cross_corellation( vector, vector, offset, N )
+def autocorrelation( vector, offset=100, N=100 ):
+    """cross-correlation of a vector with itself"""
+    return cross_correlation( vector, vector, offset, N )
 
-def autocorellation_au( audio_buf, offset=100, N=100 ):
-    return autocorellation( audio2array(audio_buf), offset, N )
+def autocorrelation_au( audio_buf, offset=100, N=100 ):
+    return autocorrelation( audio2array(audio_buf), offset, N )
 
 def trim_front_silence( audio_buf ):
     """Trims the silent beginning of the audio buffer.  We consider silence to
@@ -399,9 +396,11 @@ def test():
     Y = Y[:,:len(F)]
     print array2string( column_stack( (F,Y[0:trials].T)), precision=2 )
 
-def recording_xcorr( rec, ping, ping_period, offset=1 ):
+def recording_xcorr( rec, ping, ping_period, offset=1, reference_xcorr=None ):
     """measures the cross correlation of the recording and ping, after cutting
-    out the head and tail of the recording"""
+    out the head and tail of the recording
+    reference_xcorr is previously-recorded cross correlation which we seek to
+    line this one up with."""
     length = audio_length( ping )
     period_samples = int( RATE*ping_period / offset )
 
@@ -409,24 +408,30 @@ def recording_xcorr( rec, ping, ping_period, offset=1 ):
     # TODO: is this neccessary?
     rec = audio_window( rec, length/2.0, REC_PADDING+0.1 )
 
-    cross_corr = cross_corellation_au( rec, ping, offset, 2*period_samples )
+    cross_corr = cross_correlation_au( rec, ping, offset, 2*period_samples )
 
-    # trim the cross corellation data to a window starting at its peak
-    # value and lasting for just over one period length
-    peak_loc = cross_corr.argmax()
+    peak_loc = 0; # declare scope
+    if reference_xcorr is None:
+        # trim the cross correlation data to a window starting at its peak
+        # value and lasting for just over one period length
+        peak_loc = cross_corr.argmax()
+    else:
+        # align with reference
+        xref = cross_correlation( cross_corr, reference_xcorr, 1, 
+                                  len(reference_xcorr) )
+        peak_loc = xref.argmax()
+
     # if the largest peak happens to be at the beginning of the last
     #  (incomplete) period, then choose the previous corresponding period
     if peak_loc+period_samples >= cross_corr.size:
-        peak_loc = peak_loc-period_samples
-    cross_corr = cross_corr[peak_loc:]
-    cross_corr = cross_corr[:period_samples]
-    return cross_corr        
+        peak_loc -= period_samples
+    return cross_corr[ peak_loc : peak_loc+period_samples ]
 
 def measure_ping_CTFM( ping, length=1, offset=1 ):
     """creates a transmission of given length from a sequence of given ping
     audio buffers.  Then plays and records this CTFM tone and returns the
-    cross corellation of the recording relative to the CTFM tone.  The
-    returned cross corellation is aligned to the highest peak and cut off after
+    cross correlation of the recording relative to the CTFM tone.  The
+    returned cross correlation is aligned to the highest peak and cut off after
     one period of the tone."""
     period = audio_length( ping )
     # repeat ping to extend to length duration
@@ -437,7 +442,7 @@ def measure_ping_CTFM( ping, length=1, offset=1 ):
 
 def test_CTFM( ping_length = 1, ping_period = 0.01, freq_start = 20000, 
                freq_end = 2000 ):
-    """plots cross corellations (relative to ping) for two sets of recordings,
+    """plots cross correlations (relative to ping) for two sets of recordings,
     present and not present"""
     ping = lin_sweep_tone( ping_period, freq_start, freq_end )
 
@@ -472,7 +477,7 @@ def CTFM_scope( ping_length = 1, ping_period = 0.01, freq_start = 20000,
                 freq_end = 2000 ):
     """gives an interactive view of the cross correlations"""
     from pylab import plot,ion,draw,ylim
-    OFFSET = 1 # reduces crosscorellation resolution to speed up display
+    OFFSET = 1 # reduces crosscorrelation resolution to speed up display
 
     ping = lin_sweep_tone( ping_period, freq_start, freq_end )
     cc = measure_ping_CTFM( ping, ping_length, OFFSET )
@@ -500,11 +505,11 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
     # set up the plots
     gnuplot = subprocess.Popen(["gnuplot"], shell=True, \
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    #print >>gnuplot.stdin, "set terminal x11;"
+    print >>gnuplot.stdin, "set terminal x11;"
 
     ping = lin_sweep_tone( ping_period, freq_start, freq_end )
     # autocorrelation
-    ac = cross_corellation_au( ping, ping, OFFSET, int( ping_period*RATE ) )
+    ac = cross_correlation_au( ping, ping, OFFSET, int( ping_period*RATE ) )
     recording=0
     
     # initialize null values for first plotting
@@ -536,8 +541,11 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
             recording = read_audio( "out%d.wav" % ((num_recordings-1)%2),
                                     False ) #its mono 
             # calculate cross correlation
+            reference = None
+            #if num_recordings > 2:
+            #    reference = cc[len(cc)-1]
             cc.append( recording_xcorr( recording, full_ping,
-                                      ping_period, OFFSET ) )
+                                        ping_period, OFFSET, reference ) )
 
             # plot it
             print >>gnuplot.stdin, "set title 'CTFM sonar %dHz to %dHz in %f sec (%dHz sample rate)';" % (freq_start, freq_end, ping_period, RATE )
@@ -562,6 +570,8 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
                     print >>gnuplot.stdin, "%d %d %f" % (k,j,i/cc_max)
                 print >>gnuplot.stdin, ""
             print >>gnuplot.stdin, "EOF"
+
+            #raw_input( 'press enter to continue' )
         
         # wait for recording to finish
         arecord.wait()
