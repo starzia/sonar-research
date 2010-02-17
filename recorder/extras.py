@@ -179,12 +179,28 @@ def cross_correlation( vector, lagged_vector, offset=1, N=100 ):
     lagged_vector = array( lagged_vector, dtype=float32 )
 
     for i in range( N ):
-        if i*offset < len(vector):
-            conv_len = min( [ len(vector)-i*offset, len(lagged_vector) ] )
+        conv_len = min( [ len(vector)-i*offset, len(lagged_vector) ] )
+        if conv_len > 0:
             C[i] = dot( lagged_vector[:conv_len],
                         vector[ i*offset : i*offset+conv_len ] )
     return C
 
+def fft_xcorr( vector, lagged_vector ):
+    """optimized cross correlation, based on FFT. returns only the positive
+    lags"""
+    lagged_vector = flipud(lagged_vector)
+    # choose the FFT size as a sufficiently large power of two
+    xcorr_size = len(vector) + len(lagged_vector) + 1
+    NFFT = 1
+    while NFFT < xcorr_size:
+        NFFT *= 2
+    # multiply in frequency domain
+    V1 = fft( vector, NFFT )
+    V2 = fft( lagged_vector, NFFT )
+    Y = V1 * V2
+    y = real( ifft( Y ) )
+    return y[ xcorr_size/2 - 1 : xcorr_size ]
+    
 def cross_correlation_au( audio_buf, source_audio_buf, offset=100, N=100 ):
     return cross_correlation( audio2array(audio_buf), 
                               audio2array(source_audio_buf),
