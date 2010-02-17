@@ -186,7 +186,7 @@ def cross_correlation( vector, lagged_vector, offset=1, N=100 ):
     return C
 
 def fft_xcorr( vector, lagged_vector ):
-    """optimized cross correlation, based on FFT. returns only the positive
+    """optimized cross correlation, based on FFT. returns only the non-negative
     lags"""
     lagged_vector = flipud(lagged_vector)
     # choose the FFT size as a sufficiently large power of two
@@ -593,7 +593,16 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
         arecord.wait()
         num_recordings += 1
 
-
+def measure_room_response():
+    """measures room impulse response using a two minute Maximum Length
+    Sequence."""
+    mls = read_audio( 'mls_48k_120s.wav', False )
+    rec = recordback( mls )
+    xc = fft_xcorr( rec, mls )
+    # the MLS we use is 65535 samples long
+    am = argmax( xc )
+    return xc[am:am+65535]
+    
 
 def plot_audio( audio_buf ):
     from pylab import plot
