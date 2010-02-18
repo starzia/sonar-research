@@ -299,6 +299,19 @@ def recordback( audio ):
     p.wait()
     return read_audio( "recordback.wav", False )
 
+def downsample(vector, factor):
+    """
+    downsample(vector, factor):
+        Downsample (by averaging) a vector by an integer factor.
+    code from: http://mail.scipy.org/pipermail/numpy-discussion/2006-May/007961.html
+    """
+    if (len(vector) % factor):
+        print "Length of 'vector' is not divisible by 'factor'=%d!" % factor
+        return 0
+    vector.shape = (len(vector)/factor, factor)
+    return mean(vector, axis=1)
+
+
 def measure_stats( audio_buffer, freq ):
     """Returns the mean and variance of the intensities of a given frequency
     in the audio buffer sampled in windows spread throughout the recording."""

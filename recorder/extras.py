@@ -425,7 +425,8 @@ def recording_xcorr( rec, ping, ping_period, offset=1, reference_xcorr=None ):
     # TODO: is this neccessary?
     rec = audio_window( rec, length/2.0, REC_PADDING+0.1 )
 
-    cross_corr = cross_correlation_au( rec, ping, offset, 2*period_samples )
+    #cross_corr = cross_correlation_au( rec, ping, offset, 2*period_samples )
+    cross_corr = fft_xcorr( audio2array(rec), audio2array(ping) )
 
     peak_loc = 0; # declare scope
     if reference_xcorr is None:
@@ -515,7 +516,7 @@ def CTFM_scope( ping_length = 1, ping_period = 0.01, freq_start = 20000,
 
 
 def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
-                  freq_end = 10000, OFFSET=1, HISTORY=50 ):
+                  freq_end = 10000, OFFSET=1, HISTORY=50, DOWNSAMPLE=4 ):
     """gives an interactive view of the cross correlations,
     OFFSET can be used to reduce xcorr resolution to speed up display
     HISTORY is the number of plots to display"""
@@ -532,7 +533,7 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
     # initialize null values for first plotting
     cc = []
     for k in range( HISTORY ):
-        cc.append( zeros( len(ac) ) )
+        cc.append( zeros( len(ac)/DOWNSAMPLE ) )
 
     num_recordings = 0
     while 1:
@@ -554,8 +555,8 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
             reference = None
             #if num_recordings > 2:
             #    reference = cc[len(cc)-1]
-            cc.append( recording_xcorr( recording, full_ping,
-                                        ping_period, OFFSET, reference ) )
+            cc.append( downsample( recording_xcorr( recording, full_ping,
+                                   ping_period, OFFSET, reference ), DOWNSAMPLE ) )
 
             # plot it
             print >>gnuplot.stdin, "set title 'CTFM sonar %dHz to %dHz in %f sec (%dHz sample rate)';" % (freq_start, freq_end, ping_period, RATE )
@@ -569,7 +570,7 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
 
             # below, -0.5 is for pixel center offset and 330 m/s is speed of sound 
             print >>gnuplot.stdin, "splot '-' using ($2*%f):($1*%f-0.5):3 \
-              with image title '';\n" % (330.0/RATE, ping_length), 
+              with image title '';\n" % (DOWNSAMPLE*330.0/RATE, ping_length), 
             k=0
             cc_max = cc[HISTORY-1].max() # normalize to the latest cc vector
             for cc_i in cc:
