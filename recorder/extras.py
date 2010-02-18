@@ -188,7 +188,8 @@ def cross_correlation( vector, lagged_vector, offset=1, N=100 ):
 def fft_xcorr( vector, lagged_vector ):
     """optimized cross correlation, based on FFT. returns only the non-negative
     lags"""
-    lagged_vector = flipud(lagged_vector)
+    # flip order of vector
+    lagged_vector = lagged_vector[::-1,...]
     # choose the FFT size as a sufficiently large power of two
     xcorr_size = len(vector) + len(lagged_vector) + 1
     NFFT = 1
@@ -540,15 +541,8 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
         play_audio( full_ping )
     
         # start non-blocking record
-        # TODO: lengthen buffer to prevent stuttering
-        arecord = subprocess.Popen(["arecord", 
-                                    ("--device=%s"%"default"),
-                                    ("--rate=%d"%RATE), 
-                                    ("--duration=%f"%ping_length), 
-                                    "--format=S16_LE",
-                                    "--channels=1",
-                                    "--quiet", 
-                                    "out%d.wav" % (num_recordings%2) ])
+        arecord = nonblocking_record_audio( ping_length, 
+                                            "out%d.wav"%(num_recordings%2) )
         
         # process previous iteration's recording, if not 1st iteration
         if( num_recordings > 1 ):
@@ -594,10 +588,13 @@ def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
         num_recordings += 1
 
 def measure_room_response():
-    """measures room impulse response using a two minute Maximum Length
+    """measures room impulse response using a one minute Maximum Length
     Sequence."""
-    mls = read_audio( 'mls_48k_120s.wav', False )
-    rec = recordback( mls )
+    print "recording..."
+    mls = read_audio( 'mls_48k_60s.wav', False )
+    rec = audio2array( recordback( mls ) )
+    mls = audio2array( mls )
+    print "xcorr..."
     xc = fft_xcorr( rec, mls )
     # the MLS we use is 65535 samples long
     am = argmax( xc )

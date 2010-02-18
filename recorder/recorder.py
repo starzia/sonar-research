@@ -40,6 +40,8 @@ RATE=48000
 TONE_VOLUME= 0.1 # one a scale from 0 to 1
 REC_PADDING = 0.2 # amount of extra time to recordback to account for lack of
                 # playback/record synchronization
+BUFFER_LENGTH = 3 # three second record/playback buffer for aplay/arecord
+
 SLEEP_TIME = 2
 DEBUG = 0
 TRAINING_TRIALS = 4
@@ -237,15 +239,17 @@ def read_audio( filename, stereo=True ):
         return buf
 
 def play_audio( audio_buffer ):
-    """plays an audio clip.  This should return
-    immediately after the tone STARTS playback."""
+    """plays an audio clip.  This should return immediately after the 
+    tone STARTS playback.  The returned process handle has a wait()
+    function for blocking until the playback is completed."""
     if DEBUG: print 'Playing...'
     tmp_wav_file = CONFIG_DIR_PATH + "tone.wav"
     write_audio( audio_buffer, tmp_wav_file )
 
-    ## spawn background process to playback tone
-    subprocess.Popen(["aplay", "-q", tmp_wav_file])
-    #play_dev.write( audio_buffer )
+    # spawn background process to playback tone
+    return subprocess.Popen(["aplay", "-q",
+                             "--buffer-time=%d" % (BUFFER_LENGTH*1000000), 
+                             tmp_wav_file])
 
 def play_tone( tone_length, tone_freq ):
     """plays a sound tone of a given duration and pitch.  This should return
@@ -254,9 +258,25 @@ def play_tone( tone_length, tone_freq ):
     blip = tone( tone_length, tone_freq, 0 )
     play_audio( blip )
 
+def nonblocking_record_audio( seconds, filename ):
+    """records audio for given duration using the arecord app.  
+    returns a subprocess handle which has a wait() function."""
+    # spawn process to record tone
+    p = subprocess.Popen(["arecord", 
+                          ("--device=%s" % "default"),
+                          ("--rate=%d" % RATE), 
+                          ("--duration=%f" % seconds), 
+                          "--format=S16_LE",
+                          "--channels=1",
+                          "--quiet", 
+                          "--buffer-time=%d" % (BUFFER_LENGTH*1000000),
+                          filename ])
+    return p
+
 def record_audio( seconds ):
-    """records audio for given duration.  returns an audio buffer."""
+    """records audio for given duration."""
     if DEBUG: print 'Recording...'
+
     rec_dev = open_rec_dev()
     # below, 2* is for 2 bytes per sample (parameter is num of bytes to read)
     rec_bytes = 2*int( math.floor( RATE*seconds ) )
@@ -274,7 +294,10 @@ def recordback( audio ):
     """Plays audio while recording and return the recording"""
     play_audio( audio )
     # padding is to account for lack of record/playback synchronization
-    return record_audio( audio_length( audio ) + REC_PADDING )
+    p = nonblocking_record_audio( audio_length( audio ) + REC_PADDING, 
+                                  "recordback.wav" )
+    p.wait()
+    return read_audio( "recordback.wav", False )
 
 def measure_stats( audio_buffer, freq ):
     """Returns the mean and variance of the intensities of a given frequency
