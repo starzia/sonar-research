@@ -98,7 +98,8 @@ def tone( duration=0.5, freq=440, delay=0, FADE_SAMPLES=44,
     return data.tostring() # tostring() serves as array2audio()
 
 def prepend_silence( audio, silence_duration, sample_rate=RATE ):
-    """prepend silence_duration seconds of silence to the audio buffer"""
+    """prepend silence_duration seconds of silence to the array.
+    Note that this fcn operates on arrays, not audio buffers"""
     silence_length = int(math.floor( silence_duration * sample_rate ))
     data = empty( (silence_length + len(audio), 1), dtype=int16  )
 
@@ -211,18 +212,23 @@ def real_sleep( seconds ):
     while time.time() < end_time:
         time.sleep( 0.5 )
 
-def write_audio( audio_buf, filename, sample_rate=RATE ):
-    """parameter is a mono audio file but the output file is stereo with
-    silent right channel"""
+def write_audio( audio_buf, filename, sample_rate=RATE, stereo=True ):
+    """parameter is a mono audio file.  If flag @stereo is set, then the 
+    output file is stereo with one silent channel (this is useful if the
+    file is going to be used as a sonar emission)."""
     # convert mono audio buffer to stereo
     # below, parameters are ( buffer, width, lfactor, rfactor)
-    if SPEAKER=='right':
-        audio_buf = audioop.tostereo( audio_buf, 2, 0, 1 )
-    else: # SPEAKER=='left'
-        audio_buf = audioop.tostereo( audio_buf, 2, 1, 0 )
+    if( stereo ):
+        if SPEAKER=='right':
+            audio_buf = audioop.tostereo( audio_buf, 2, 0, 1 )
+        else: # SPEAKER=='left'
+            audio_buf = audioop.tostereo( audio_buf, 2, 1, 0 )
 
     wfile = wave.open( filename, 'w' )
-    wfile.setnchannels(2)
+    if( stereo ):
+        wfile.setnchannels(2)
+    else:
+        wfile.setnchannels(1)
     wfile.setsampwidth(2) # two bytes == 16 bit
     wfile.setframerate(sample_rate)
     wfile.writeframes( audio_buf )

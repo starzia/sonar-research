@@ -516,10 +516,12 @@ def CTFM_scope( ping_length = 1, ping_period = 0.01, freq_start = 20000,
 
 
 def CTFM_gnuplot( ping_length = 1, ping_period = 0.03, freq_start = 20000,
-                  freq_end = 10000, OFFSET=1, HISTORY=50, DOWNSAMPLE=4 ):
+                  freq_end = 10000, OFFSET=1, HISTORY=50, DOWNSAMPLE=1 ):
     """gives an interactive view of the cross correlations,
     OFFSET can be used to reduce xcorr resolution to speed up display
-    HISTORY is the number of plots to display"""
+    HISTORY is the number of plots to display
+    DOWNSAMPLE is the downsample factor, eg 4 means four consecutive samples
+    are averaged."""
     # set up the plots
     gnuplot = subprocess.Popen(["gnuplot"], shell=True, \
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -600,6 +602,34 @@ def measure_room_response():
     # the MLS we use is 65535 samples long
     am = argmax( xc )
     return xc[am:am+65535]
+    
+def room_response_study( storage_directory ):
+    """makes a series of room response recordings, querying the user for a 
+    description of each room."""
+    import os.path
+    mls = read_audio( 'mls_48k_60s.wav', False )
+
+    # CTFM constants
+    ping_period=0.3
+    ping_length=60
+    freq_start=20000
+    freq_end=10000
+    ping = lin_sweep_tone( ping_period, freq_start, freq_end )
+    full_ping = audio_repeat( ping, int(ceil(ping_length/ping_period))  )
+    
+    # join sixty seconds of silence, then MLS, then CTFM
+    sig = tone( 60, 0 ) + mls + full_ping
+
+    while( 1 ):
+        print "Press <enter> to make the next recording"
+        sys.stdin.readline()
+
+        rec = recordback( sig )
+        description = ''
+        while( description == '' or os.path.exists( filename ) ):
+            description = raw_input( 'enter a description for the recording filename (no spaces please):' )
+            filename = "%s/%s.wav" % (storage_directory,description)
+        write_audio( rec, filename, RATE, False )
     
 
 def plot_audio( audio_buf ):
